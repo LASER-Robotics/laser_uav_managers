@@ -33,6 +33,8 @@ CallbackReturn ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
 CallbackReturn ControlManagerNode::on_activate([[maybe_unused]] const rclcpp_lifecycle::State &state) {
   RCLCPP_INFO(get_logger(), "Activating");
 
+  pub_attitude_rates_and_thrust_reference_->on_activate();
+
   is_active_ = true;
 
   return CallbackReturn::SUCCESS;
@@ -43,6 +45,8 @@ CallbackReturn ControlManagerNode::on_activate([[maybe_unused]] const rclcpp_lif
 CallbackReturn ControlManagerNode::on_deactivate([[maybe_unused]] const rclcpp_lifecycle::State &state) {
   RCLCPP_INFO(get_logger(), "Deactivating");
 
+  pub_attitude_rates_and_thrust_reference_->on_deactivate();
+
   is_active_ = false;
 
   return CallbackReturn::SUCCESS;
@@ -52,6 +56,8 @@ CallbackReturn ControlManagerNode::on_deactivate([[maybe_unused]] const rclcpp_l
 /* on_clenaup() //{ */
 CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_lifecycle::State &state) {
   RCLCPP_INFO(get_logger(), "Cleaning up");
+
+  pub_attitude_rates_and_thrust_reference_.reset();
 
   sub_odometry_.reset();
   sub_goto_.reset();
@@ -79,6 +85,8 @@ void ControlManagerNode::configPubSub() {
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
   sub_goto_     = create_subscription<geometry_msgs::msg::Pose>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
+
+  pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("/uav1/attitude_rates_thrust_in", 10);
 }
 //}
 
@@ -86,8 +94,9 @@ void ControlManagerNode::configPubSub() {
 void ControlManagerNode::configTimers() {
   RCLCPP_INFO(get_logger(), "initTimers");
 
-  /* tmr_core_control_ = */
-  /*     create_wall_timer(std::chrono::duration<double>(1.0 / _rate_core_control_), std::bind(&ControlManagerNode::tmrCoreControl, this), nullptr); */
+  tmr_core_control_ =
+      /* create_wall_timer(std::chrono::duration<double>(1.0 / _rate_core_control_), std::bind(&ControlManagerNode::tmrCoreControl, this), nullptr); */
+      create_wall_timer(std::chrono::duration<double>(1.0 / 100), std::bind(&ControlManagerNode::tmrCoreControl, this), nullptr);
 
   /* tmr_diagnostics_ = create_wall_timer(std::chrono::duration<double>(1.0 / _rate_diagnostics_), std::bind(&ControlManagerNode::tmrDiagnostics, this),
    * nullptr); */
@@ -104,7 +113,7 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
-  /* nmpc_controller_ = laser_uav_controllers::NmpcController(); */
+  nmpc_controller_ = laser_uav_controllers::NmpcController();
 }
 //}
 
@@ -124,7 +133,7 @@ void ControlManagerNode::subGoto(const geometry_msgs::msg::Pose &msg) {
     return;
   }
 
-  nmpc_controller_.getCorrection(msg, odometry_);
+  current_reference_ = msg;
 }
 //}
 
@@ -133,6 +142,9 @@ void ControlManagerNode::tmrCoreControl() {
   if (!is_active_) {
     return;
   }
+
+  laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_reference_, odometry_);
+  pub_attitude_rates_and_thrust_reference_->publish(msg);
 }
 //}
 

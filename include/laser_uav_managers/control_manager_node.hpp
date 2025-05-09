@@ -11,6 +11,8 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 
+#include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
+
 #include <laser_uav_controllers/nmpc_controller.hpp>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -48,15 +50,17 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Pose>::ConstSharedPtr sub_goto_;
   void                                                           subGoto(const geometry_msgs::msg::Pose &msg);
 
-  double                       _rate_core_control_;
-  rclcpp::TimerBase::SharedPtr tmr_core_control_;
-  void                         tmrCoreControl();
+  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::AttitudeRatesAndThrust>::SharedPtr pub_attitude_rates_and_thrust_reference_;
+  double                                                                                   _rate_core_control_;
+  rclcpp::TimerBase::SharedPtr                                                             tmr_core_control_;
+  void                                                                                     tmrCoreControl();
 
   double                       _rate_diagnostics_;
   rclcpp::TimerBase::SharedPtr tmr_diagnostics_;
   void                         tmrDiagnostics();
 
-  nav_msgs::msg::Odometry odometry_;
+  nav_msgs::msg::Odometry  odometry_;
+  geometry_msgs::msg::Pose current_reference_;
 
   laser_uav_controllers::NmpcController nmpc_controller_;
 
