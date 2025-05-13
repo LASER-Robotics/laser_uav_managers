@@ -51,6 +51,8 @@ def generate_launch_description():
         # prefix=['valgrind --leak-check=full'],
         remappings=[
             ('/odometry_in', '/uav1/odometry'),
+            # ('/odometry_in', '/odom'),
+            # ('/goto_in', '/uav1/goto'),
         ]
     )
 
