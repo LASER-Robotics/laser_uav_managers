@@ -16,29 +16,29 @@ from launch_ros.events.lifecycle import ChangeState
 
 import lifecycle_msgs.msg
 
+import os
+
 def generate_launch_description():
-    #Declare arguments
+    uav_type = os.environ['uav_type']
+
+    if uav_type == "":
+        print("The uav type dont set up in yours enviroment variables")
+        return
+
+    # Declare arguments
     declared_arguments = []
 
-    # declared_arguments.append(
-    #     DeclareLaunchArgument(
-    #         'control_manager_file',
-    #         default_value=PathJoinSubstitution([FindPackageShare('laser_hexapod_managers'),
-    #                                             'params', 'control_manager.yaml']),
-    #         description='Full path to the file with the all parameters.'
-    #     )
-    # )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'control_manager_file',
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_managers'),
+                                                'params', 'control_manager', uav_type + '.yaml']),
+            description='Full path to the file with the all parameters.'
+        )
+    )
 
-    # declared_arguments.append(
-    #     DeclareLaunchArgument(
-    #         'development_mode',
-    #         default_value='False',
-    #         description='Flag for enable development mode.'
-    #     )
-    # )
-
-#Initialize arguments
-    # control_manager_file = LaunchConfiguration('control_manager_file')
+    # Initialize arguments
+    control_manager_file = LaunchConfiguration('control_manager_file')
 
     control_manager_lifecycle_node = LifecycleNode(
         package='laser_uav_managers',
@@ -46,13 +46,11 @@ def generate_launch_description():
         name='control_manager',
         namespace='',
         output='screen',
-        parameters=[],
-        # prefix=['gdb -ex "run" -ex "info locals" -ex "list"  -ex "print x0" -ex "print lastU" -ex "print *optPtr" -ex "print nlmpc_solver_" --args'],
-        # prefix=['valgrind --leak-check=full'],
+        parameters=[control_manager_file],
         remappings=[
             ('/odometry_in', '/uav1/odometry'),
+            ('/goto_in', '/uav1/goto'),
             # ('/odometry_in', '/odom'),
-            # ('/goto_in', '/uav1/goto'),
         ]
     )
 

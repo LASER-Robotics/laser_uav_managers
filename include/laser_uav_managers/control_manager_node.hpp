@@ -62,6 +62,8 @@ private:
   nav_msgs::msg::Odometry  odometry_;
   geometry_msgs::msg::Pose current_reference_;
 
+  laser_uav_controllers::quadrotor_t    _quadrotor_params_;
+  laser_uav_controllers::acados_t       _acados_params_;
   laser_uav_controllers::NmpcController nmpc_controller_;
 
   bool is_active_{false};

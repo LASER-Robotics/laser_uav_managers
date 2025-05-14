@@ -6,6 +6,23 @@ namespace laser_uav_managers
 ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode("control_manager", "", options) {
   RCLCPP_INFO(get_logger(), "Creating");
 
+  declare_parameter("rate.core_control", rclcpp::ParameterValue(10.0));
+  declare_parameter("rate.diagnostics", rclcpp::ParameterValue(10.0));
+
+  declare_parameter("nmpc_controller.quadrotor_parameters.mass", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.inertia", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+  declare_parameter("nmpc_controller.quadrotor_parameters.c_tau", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.drag", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+  declare_parameter("nmpc_controller.quadrotor_parameters.motors_positions", rclcpp::ParameterValue(std::vector<float_t>(8, 0.0)));
+  declare_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.a", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.b", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.thrust_min", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
+
+  declare_parameter("nmpc_controller.acados_parameters.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
+  declare_parameter("nmpc_controller.acados_parameters.R", rclcpp::ParameterValue(0.0));
+
   odometry_ = nav_msgs::msg::Odometry();
 }
 //}
@@ -76,6 +93,45 @@ CallbackReturn ControlManagerNode::on_shutdown([[maybe_unused]] const rclcpp_lif
 
 /* getParameters() //{ */
 void ControlManagerNode::getParameters() {
+  rclcpp::Parameter aux;
+
+  /* get_parameter("rate.core_control", rclcpp::ParameterValue(10.0)); */
+  /* get_parameter("rate.diagnostics", rclcpp::ParameterValue(10.0)); */
+
+  get_parameter("nmpc_controller.quadrotor_parameters.mass", _quadrotor_params_.mass);
+
+  get_parameter("nmpc_controller.quadrotor_parameters.inertia", aux);
+  _quadrotor_params_.inertia_x = (aux.as_double_array())[0];
+  _quadrotor_params_.inertia_y = (aux.as_double_array())[1];
+  _quadrotor_params_.inertia_z = (aux.as_double_array())[2];
+
+  get_parameter("nmpc_controller.quadrotor_parameters.c_tau", _quadrotor_params_.c_tau);
+
+  get_parameter("nmpc_controller.quadrotor_parameters.drag", aux);
+  _quadrotor_params_.drag_x = (aux.as_double_array())[0];
+  _quadrotor_params_.drag_y = (aux.as_double_array())[1];
+  _quadrotor_params_.drag_z = (aux.as_double_array())[1];
+
+  get_parameter("nmpc_controller.quadrotor_parameters.motors_positions", aux);
+  _quadrotor_params_.motor_position_0[0] = (aux.as_double_array())[0];
+  _quadrotor_params_.motor_position_0[1] = (aux.as_double_array())[1];
+  _quadrotor_params_.motor_position_1[0] = (aux.as_double_array())[2];
+  _quadrotor_params_.motor_position_1[1] = (aux.as_double_array())[3];
+  _quadrotor_params_.motor_position_2[0] = (aux.as_double_array())[4];
+  _quadrotor_params_.motor_position_2[1] = (aux.as_double_array())[5];
+  _quadrotor_params_.motor_position_3[0] = (aux.as_double_array())[6];
+  _quadrotor_params_.motor_position_3[1] = (aux.as_double_array())[7];
+
+  get_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.a", _quadrotor_params_.motor_curve_a);
+  get_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.b", _quadrotor_params_.motor_curve_b);
+  get_parameter("nmpc_controller.quadrotor_parameters.thrust_min", _quadrotor_params_.thrust_min);
+  get_parameter("nmpc_controller.quadrotor_parameters.thrust_max", _quadrotor_params_.thrust_max);
+  get_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", _quadrotor_params_.total_thrust_max);
+
+  get_parameter("nmpc_controller.acados_parameters.Q", aux);
+  _acados_params_.Q = aux.as_double_array();
+
+  get_parameter("nmpc_controller.acados_parameters.R", _acados_params_.R);
 }
 //}
 
@@ -113,7 +169,7 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
-  nmpc_controller_ = laser_uav_controllers::NmpcController();
+  nmpc_controller_ = laser_uav_controllers::NmpcController(_quadrotor_params_, _acados_params_);
 }
 //}
 

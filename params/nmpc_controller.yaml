@@ -1,7 +1,0 @@
-control_manager:
-  ros__parameters:
-    dimensions:
-      N: 50 # number of intervals in the horizon
-      NX: 13 # number of states
-      NU: 4 # number of control inputs:wq
-
