@@ -15,7 +15,9 @@
   <depend>nav_msgs</depend>
   <depend>std_srvs</depend>
   <depend>laser_msgs</depend>
+  <depend>px4_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>laser_uav_trackers</depend>
   <depend>laser_uav_controllers</depend>
 
   <test_depend>ament_lint_auto</test_depend>

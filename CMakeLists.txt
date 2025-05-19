@@ -20,6 +20,7 @@ find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(laser_uav_trackers REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
 
 set(acados_include "$ENV{ACADOS_SOURCE_DIR}/include")
@@ -35,14 +36,14 @@ nav_msgs
 std_srvs 
 px4_msgs
 laser_msgs
+laser_uav_trackers
 laser_uav_controllers
 )
 
+find_library(laser_uav_trackers laser_uav_trackers)
 find_library(laser_uav_controllers laser_uav_controllers)
 
 link_directories(${full_model_build})
-
-message(WARNING "${full_model_build}\n\n\n\n")
 
 include_directories(
   include
@@ -73,6 +74,7 @@ ament_target_dependencies(${executable_name}
 
 target_link_libraries(${executable_name}
   control_manager_core
+	${laser_uav_trackers}
 	${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so
 	${acados_lib}/libacados.so

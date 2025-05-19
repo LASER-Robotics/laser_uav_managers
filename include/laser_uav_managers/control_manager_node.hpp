@@ -13,6 +13,7 @@
 
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 
+#include <laser_uav_trackers/waypoint_tracker.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -61,6 +62,8 @@ private:
 
   nav_msgs::msg::Odometry  odometry_;
   geometry_msgs::msg::Pose current_reference_;
+
+  laser_uav_trackers::WaypointTracker waypoint_tracker_;
 
   laser_uav_controllers::quadrotor_t    _quadrotor_params_;
   laser_uav_controllers::acados_t       _acados_params_;

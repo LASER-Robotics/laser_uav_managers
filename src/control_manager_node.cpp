@@ -23,7 +23,9 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("nmpc_controller.acados_parameters.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
   declare_parameter("nmpc_controller.acados_parameters.R", rclcpp::ParameterValue(0.0));
 
-  odometry_ = nav_msgs::msg::Odometry();
+  odometry_                        = nav_msgs::msg::Odometry();
+  current_reference_               = geometry_msgs::msg::Pose();
+  current_reference_.orientation.w = 1;
 }
 //}
 
@@ -169,6 +171,8 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
+  waypoint_tracker_ = laser_uav_trackers::WaypointTracker();
+  waypoint_tracker_.setInitialAndEndWaypoint(current_reference_, current_reference_);
   nmpc_controller_ = laser_uav_controllers::NmpcController(_quadrotor_params_, _acados_params_);
 }
 //}
@@ -189,6 +193,10 @@ void ControlManagerNode::subGoto(const geometry_msgs::msg::Pose &msg) {
     return;
   }
 
+  geometry_msgs::msg::Pose aux = msg;
+
+  waypoint_tracker_.setInitialAndEndWaypoint(current_reference_, aux);
+
   current_reference_ = msg;
 }
 //}
@@ -199,7 +207,7 @@ void ControlManagerNode::tmrCoreControl() {
     return;
   }
 
-  laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_reference_, odometry_);
+  laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(waypoint_tracker_.updateReference(odometry_), odometry_);
   pub_attitude_rates_and_thrust_reference_->publish(msg);
 }
 //}
