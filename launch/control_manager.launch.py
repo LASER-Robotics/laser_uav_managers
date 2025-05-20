@@ -31,8 +31,8 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'control_manager_file',
-            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_managers'),
-                                                'params', 'control_manager', uav_type + '.yaml']),
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_controllers'),
+                                                '../../include/params', 'nmpc_controller', uav_type + '.yaml']),
             description='Full path to the file with the all parameters.'
         )
     )

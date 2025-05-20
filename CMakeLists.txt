@@ -25,7 +25,7 @@ find_package(laser_uav_controllers REQUIRED)
 
 set(acados_include "$ENV{ACADOS_SOURCE_DIR}/include")
 set(acados_lib "$ENV{ACADOS_SOURCE_DIR}/lib")
-set(full_model_build ${laser_uav_controllers_DIR}/../../../include/scripts/c_generated_code)
+set(full_model_build ${laser_uav_controllers_DIR}/../../../include/scripts/quadrotor_ode/)
 
 set(dependencies
 Eigen3
@@ -104,7 +104,6 @@ install(DIRECTORY include/
 
 install(DIRECTORY
   launch
-  params
   DESTINATION share/${PROJECT_NAME}
 )
 
