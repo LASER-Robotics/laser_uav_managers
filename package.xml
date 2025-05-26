@@ -3,7 +3,7 @@
 <package format="3">
   <name>laser_uav_managers</name>
   <version>0.1.0</version>
-  <description>This packages contains nodes for management of hexapod</description>
+  <description>This packages contains nodes for manager uav</description>
   <maintainer email="augustoviniciud@gmail.com">augusto</maintainer>
   <license>BSD</license>
 
@@ -17,6 +17,7 @@
   <depend>laser_msgs</depend>
   <depend>px4_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>laser_uav_planner</depend>
   <depend>laser_uav_trackers</depend>
   <depend>laser_uav_controllers</depend>
 

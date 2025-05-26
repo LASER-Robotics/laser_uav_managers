@@ -11,8 +11,10 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 
+#include <laser_msgs/msg/reference_state.hpp>
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 
+#include <laser_uav_planner/agile_planner.hpp>
 #include <laser_uav_trackers/waypoint_tracker.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
 
@@ -65,9 +67,14 @@ private:
 
   laser_uav_trackers::WaypointTracker waypoint_tracker_;
 
+  laser_uav_planner::pmm_t        _pmm_params_;
+  laser_uav_planner::AgilePlanner agile_planner_;
+
   laser_uav_controllers::quadrotor_t    _quadrotor_params_;
   laser_uav_controllers::acados_t       _acados_params_;
   laser_uav_controllers::NmpcController nmpc_controller_;
+
+  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::ReferenceState>::SharedPtr pub_current_waypoint_;
 
   bool is_active_{false};
 };

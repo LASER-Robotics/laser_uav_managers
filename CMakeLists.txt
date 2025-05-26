@@ -20,6 +20,7 @@ find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(laser_uav_planner REQUIRED)
 find_package(laser_uav_trackers REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
 
@@ -36,10 +37,12 @@ nav_msgs
 std_srvs 
 px4_msgs
 laser_msgs
+laser_uav_planner
 laser_uav_trackers
 laser_uav_controllers
 )
 
+find_library(laser_uav_planner laser_uav_planner)
 find_library(laser_uav_trackers laser_uav_trackers)
 find_library(laser_uav_controllers laser_uav_controllers)
 
@@ -74,6 +77,7 @@ ament_target_dependencies(${executable_name}
 
 target_link_libraries(${executable_name}
   control_manager_core
+	${laser_uav_planner}
 	${laser_uav_trackers}
 	${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so

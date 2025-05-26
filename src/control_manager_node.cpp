@@ -53,6 +53,7 @@ CallbackReturn ControlManagerNode::on_activate([[maybe_unused]] const rclcpp_lif
   RCLCPP_INFO(get_logger(), "Activating");
 
   pub_attitude_rates_and_thrust_reference_->on_activate();
+  pub_current_waypoint_->on_activate();
 
   is_active_ = true;
 
@@ -145,6 +146,7 @@ void ControlManagerNode::configPubSub() {
   sub_goto_     = create_subscription<geometry_msgs::msg::Pose>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
 
   pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("/uav1/attitude_rates_thrust_in", 10);
+  pub_current_waypoint_ = create_publisher<laser_msgs::msg::ReferenceState>("/uav1/trajectory_debug", 10);
 }
 //}
 
@@ -171,8 +173,12 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
-  waypoint_tracker_ = laser_uav_trackers::WaypointTracker();
-  waypoint_tracker_.setInitialAndEndWaypoint(current_reference_, current_reference_);
+  /* waypoint_tracker_ = laser_uav_trackers::WaypointTracker(); */
+  /* waypoint_tracker_.setInitialAndEndWaypoint(current_reference_, current_reference_); */
+  agile_planner_ = laser_uav_planner::AgilePlanner();
+  laser_msgs::msg::ReferenceState start_waypoint;
+  laser_msgs::msg::ReferenceState end_waypoint;
+  agile_planner_.generateTrajectory(start_waypoint, end_waypoint);
   nmpc_controller_ = laser_uav_controllers::NmpcController(_quadrotor_params_, _acados_params_);
 }
 //}
@@ -194,8 +200,29 @@ void ControlManagerNode::subGoto(const geometry_msgs::msg::Pose &msg) {
   }
 
   current_reference_ = msg;
-  waypoint_tracker_.setInitialAndEndWaypoint(odometry_.pose.pose, current_reference_);
+  /* waypoint_tracker_.setInitialAndEndWaypoint(odometry_.pose.pose, current_reference_); */
 
+  laser_msgs::msg::ReferenceState start_waypoint;
+  start_waypoint.pose.position    = odometry_.pose.pose.position;
+  start_waypoint.pose.orientation = odometry_.pose.pose.orientation;
+  start_waypoint.twist.linear.x   = 0;
+  start_waypoint.twist.linear.y   = 0;
+  start_waypoint.twist.linear.z   = 0;
+  start_waypoint.twist.angular.x  = 0;
+  start_waypoint.twist.angular.y  = 0;
+  start_waypoint.twist.angular.z  = 0;
+
+  laser_msgs::msg::ReferenceState end_waypoint;
+  end_waypoint.pose.position    = msg.position;
+  end_waypoint.pose.orientation = msg.orientation;
+  end_waypoint.twist.linear.x   = 0;
+  end_waypoint.twist.linear.y   = 0;
+  end_waypoint.twist.linear.z   = 0;
+  end_waypoint.twist.angular.x  = 0;
+  end_waypoint.twist.angular.y  = 0;
+  end_waypoint.twist.angular.z  = 0;
+
+  agile_planner_.generateTrajectory(start_waypoint, end_waypoint);
 }
 //}
 
@@ -205,11 +232,17 @@ void ControlManagerNode::tmrCoreControl() {
     return;
   }
 
-  geometry_msgs::msg::Pose current_waypoint = waypoint_tracker_.updateReference(odometry_);
-  std::cout << "Current Waypoint: x: " << current_waypoint.position.x << ", y: " << current_waypoint.position.y << ", z:" << current_waypoint.position.z << ", w: " << current_waypoint.orientation.w << ", x: " << current_waypoint.orientation.x << ", y: " << current_waypoint.orientation.y << ", z: " << current_waypoint.orientation.z << std::endl;
-  std::cout << "Current Reference: x: " << current_reference_.position.x << ", y: " << current_reference_.position.y << ", z:" << current_reference_.position.z << ", w: " << current_reference_.orientation.w << ", x: " << current_reference_.orientation.x << ", y: " << current_reference_.orientation.y << ", z: " << current_reference_.orientation.z << std::endl;
+  /* geometry_msgs::msg::Pose current_waypoint = waypoint_tracker_.updateReference(odometry_); */
+  laser_msgs::msg::ReferenceState current_waypoint = agile_planner_.updateReference(odometry_);
+  std::cout << "Current Waypoint: x: " << current_waypoint.pose.position.x << ", y: " << current_waypoint.pose.position.y
+            << ", z:" << current_waypoint.pose.position.z << ", w: " << current_waypoint.pose.orientation.w << ", x: " << current_waypoint.pose.orientation.x
+            << ", y: " << current_waypoint.pose.orientation.y << ", z: " << current_waypoint.pose.orientation.z << std::endl;
+  std::cout << "Current Reference: x: " << current_reference_.position.x << ", y: " << current_reference_.position.y << ", z:" << current_reference_.position.z
+            << ", w: " << current_reference_.orientation.w << ", x: " << current_reference_.orientation.x << ", y: " << current_reference_.orientation.y
+            << ", z: " << current_reference_.orientation.z << std::endl;
   laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_waypoint, odometry_);
   pub_attitude_rates_and_thrust_reference_->publish(msg);
+  pub_current_waypoint_->publish(current_waypoint);
 }
 //}
 
