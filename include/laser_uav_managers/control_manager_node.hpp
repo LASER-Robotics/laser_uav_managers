@@ -62,8 +62,9 @@ private:
   rclcpp::TimerBase::SharedPtr tmr_diagnostics_;
   void                         tmrDiagnostics();
 
-  nav_msgs::msg::Odometry  odometry_;
-  geometry_msgs::msg::Pose current_reference_;
+  nav_msgs::msg::Odometry         odometry_;
+  geometry_msgs::msg::Pose        current_reference_;
+  laser_msgs::msg::ReferenceState last_waypoint;
 
   laser_uav_trackers::WaypointTracker waypoint_tracker_;
 
