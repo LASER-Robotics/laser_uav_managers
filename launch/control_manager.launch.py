@@ -30,14 +30,32 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(
+            'nmpc_controller_file',
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_controllers'), 'params', 'nmpc_controller', uav_type + '.yaml']),
+            description='Full path to the file with the all parameters.'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'agile_planner_file',
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_planner'), 'params', 'agile_planner', uav_type + '.yaml']),
+            description='Full path to the file with the all parameters.'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
             'control_manager_file',
-            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_controllers'),
-                                                '../../include/params', 'nmpc_controller', uav_type + '.yaml']),
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_managers'),
+                                                'params', 'control_manager.yaml']),
             description='Full path to the file with the all parameters.'
         )
     )
 
     # Initialize arguments
+    nmpc_controller_file = LaunchConfiguration('nmpc_controller_file')
+    agile_planner_file = LaunchConfiguration('agile_planner_file')
     control_manager_file = LaunchConfiguration('control_manager_file')
 
     control_manager_lifecycle_node = LifecycleNode(
@@ -46,7 +64,7 @@ def generate_launch_description():
         name='control_manager',
         namespace='',
         output='screen',
-        parameters=[control_manager_file],
+        parameters=[control_manager_file, agile_planner_file, nmpc_controller_file],
         remappings=[
             ('/odometry_in', '/uav1/odometry'),
             ('/goto_in', '/uav1/goto'),
