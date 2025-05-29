@@ -192,8 +192,8 @@ void ControlManagerNode::configPubSub() {
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>("trajectory_path_in", 1,
                                                                               std::bind(&ControlManagerNode::subTrajectoryPath, this, std::placeholders::_1));
 
-  pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("/uav1/attitude_rates_thrust_in", 10);
-  pub_current_waypoint_                    = create_publisher<laser_msgs::msg::ReferenceState>("/uav1/trajectory_debug", 10);
+  pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
+  pub_current_waypoint_                    = create_publisher<laser_msgs::msg::ReferenceState>("planner_view_out", 10);
 }
 //}
 

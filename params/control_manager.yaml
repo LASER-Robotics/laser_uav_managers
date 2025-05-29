@@ -1,4 +1,4 @@
-/control_manager:
+/**:
   ros__parameters:
     rate: # Hz
       loop_control: 100.0 

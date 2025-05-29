@@ -19,7 +19,12 @@ import lifecycle_msgs.msg
 import os
 
 def generate_launch_description():
+    uav_name = os.environ['uav_name']
     uav_type = os.environ['uav_type']
+
+    if uav_name == "":
+        print("The uav name dont set up in yours enviroment variables")
+        return
 
     if uav_type == "":
         print("The uav type dont set up in yours enviroment variables")
@@ -62,13 +67,17 @@ def generate_launch_description():
         package='laser_uav_managers',
         executable='control_manager',
         name='control_manager',
-        namespace='',
+        namespace=uav_name,
         output='screen',
         parameters=[control_manager_file, agile_planner_file, nmpc_controller_file],
         remappings=[
-            ('/odometry_in', '/uav1/odometry'),
-            ('/goto_in', '/uav1/goto'),
-            # ('/odometry_in', '/odom'),
+            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/goto_in', '/' + uav_name + '/control_manager/goto'),
+            ('/' + uav_name + '/trajectory_path_in', '/' + uav_name + '/control_manager/trajectory_path'),
+            ('/' + uav_name + '/planner_view_out', '/' + uav_name + '/control_manager/planner_view'),
+            ('/' + uav_name + '/attitude_rates_thrust_out', '/' + uav_name + '/px4_api/attitude_rate_thrust'),
+            ('/' + uav_name + '/takeoff', '/' + uav_name + '/control_manager/takeoff'),
+            ('/' + uav_name + '/land', '/' + uav_name + '/control_manager/land'),
         ]
     )
 
