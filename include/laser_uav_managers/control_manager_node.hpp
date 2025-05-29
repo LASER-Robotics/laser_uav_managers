@@ -74,8 +74,6 @@ private:
   nav_msgs::msg::Odometry         odometry_;
   laser_msgs::msg::ReferenceState last_waypoint_;
 
-  laser_uav_trackers::WaypointTracker waypoint_tracker_;
-
   laser_uav_planner::pmm_t        _pmm_params_;
   laser_uav_planner::AgilePlanner agile_planner_;
 
