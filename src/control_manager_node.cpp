@@ -279,14 +279,7 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     requested_takeoff_ = true;
 
     laser_msgs::msg::ReferenceState ground_waypoint;
-    ground_waypoint                 = last_waypoint_;
-    ground_waypoint.pose.position.z = 0;
-    ground_waypoint.twist.linear.x  = 0;
-    ground_waypoint.twist.linear.y  = 0;
-    ground_waypoint.twist.linear.z  = 0;
-    ground_waypoint.twist.angular.x = 0;
-    ground_waypoint.twist.angular.y = 0;
-    ground_waypoint.twist.angular.z = 0;
+    ground_waypoint.pose = odometry_.pose.pose;
 
     geometry_msgs::msg::Pose takeoff_waypoint;
     takeoff_waypoint            = last_waypoint_.pose;
@@ -316,11 +309,14 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     requested_land_ = true;
 
+    laser_msgs::msg::ReferenceState current_pose;
+    current_pose.pose = odometry_.pose.pose;
+
     geometry_msgs::msg::Pose land_waypoint;
-    land_waypoint            = last_waypoint_.pose;
+    land_waypoint            = odometry_.pose.pose;
     land_waypoint.position.z = -0.2;
 
-    agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
+    agile_planner_.generateTrajectory(current_pose, land_waypoint, 0.2, true);
 
     takeoff_done_ = false;
   }
@@ -357,9 +353,9 @@ void ControlManagerNode::tmrLoopControl() {
 
   if (requested_land_) {
     if (odometry_.pose.pose.position.z - 0.0 <= 0.3) {
-      requested_land_      = false;
-      land_done_           = true;
-      lock_control_inputs_ = true;
+      requested_land_ = false;
+      land_done_      = true;
+      /* lock_control_inputs_ = true; */
     }
   }
 }
