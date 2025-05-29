@@ -16,7 +16,6 @@
 #include <laser_msgs/msg/trajectory_path.hpp>
 
 #include <laser_uav_planner/agile_planner.hpp>
-#include <laser_uav_trackers/waypoint_tracker.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
