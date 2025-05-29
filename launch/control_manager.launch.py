@@ -26,7 +26,7 @@ def generate_launch_description():
         print("The uav name dont set up in yours enviroment variables")
         return
 
-    if uav_type == "":
+    if uav_type == "" or uav_type != "x500":
         print("The uav type dont set up in yours enviroment variables")
         return
 
