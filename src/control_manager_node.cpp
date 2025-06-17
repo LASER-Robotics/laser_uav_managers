@@ -282,7 +282,7 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     ground_waypoint.pose = odometry_.pose.pose;
 
     geometry_msgs::msg::Pose takeoff_waypoint;
-    takeoff_waypoint            = last_waypoint_.pose;
+    takeoff_waypoint            = odometry_.pose.pose;
     takeoff_waypoint.position.z = _takeoff_height_;
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
