@@ -103,6 +103,7 @@ CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_life
 
   sub_odometry_.reset();
   sub_goto_.reset();
+  sub_api_diagnostics_.reset();
   sub_trajectory_path_.reset();
 
   return CallbackReturn::SUCCESS;
@@ -189,6 +190,8 @@ void ControlManagerNode::configPubSub() {
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
   sub_goto_     = create_subscription<geometry_msgs::msg::Pose>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
+  sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
+      "api_diagnostics_in", 1, std::bind(&ControlManagerNode::subApiDiagnostics, this, std::placeholders::_1));
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>("trajectory_path_in", 1,
                                                                               std::bind(&ControlManagerNode::subTrajectoryPath, this, std::placeholders::_1));
 
@@ -235,6 +238,18 @@ void ControlManagerNode::subOdometry(const nav_msgs::msg::Odometry &msg) {
   }
 
   odometry_ = msg;
+}
+//}
+
+/* subApiDiagnostics() //{ */
+void ControlManagerNode::subApiDiagnostics(const laser_msgs::msg::ApiPx4Diagnostics &msg) {
+  if (!is_active_) {
+    return;
+  }
+
+  if (msg.armed && requested_takeoff_) {
+    lock_control_inputs_ = false;
+  }
 }
 //}
 
@@ -287,8 +302,7 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
 
-    land_done_           = false;
-    lock_control_inputs_ = false;
+    land_done_ = false;
   }
 }
 //}

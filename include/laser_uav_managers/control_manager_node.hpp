@@ -12,6 +12,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 
 #include <laser_msgs/msg/reference_state.hpp>
+#include <laser_msgs/msg/api_px4_diagnostics.hpp>
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 #include <laser_msgs/msg/trajectory_path.hpp>
 
@@ -55,6 +56,9 @@ private:
 
   rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
   void                                                                  subTrajectoryPath(const laser_msgs::msg::TrajectoryPath &msg);
+
+  rclcpp::Subscription<laser_msgs::msg::ApiPx4Diagnostics>::ConstSharedPtr sub_api_diagnostics_;
+  void                                                                     subApiDiagnostics(const laser_msgs::msg::ApiPx4Diagnostics &msg);
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_takeoff_;
   void srvTakeoff(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
