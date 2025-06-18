@@ -247,7 +247,7 @@ void ControlManagerNode::subApiDiagnostics(const laser_msgs::msg::ApiPx4Diagnost
     return;
   }
 
-  if (msg.armed && requested_takeoff_) {
+  if (msg.armed && requested_takeoff_ && msg.offboard_mode) {
     lock_control_inputs_ = false;
   }
 }
