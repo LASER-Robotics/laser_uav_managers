@@ -19,8 +19,9 @@ import lifecycle_msgs.msg
 import os
 
 def generate_launch_description():
-    uav_name = os.environ['uav_name']
-    uav_type = os.environ['uav_type']
+    uav_name = os.environ['UAV_NAME']
+    uav_type = os.environ['UAV_TYPE']
+    estimation_source = os.environ['UAV_ESTIMATION_SOURCE']
 
     if uav_name == "":
         print("The uav name dont set up in yours enviroment variables")
@@ -29,6 +30,15 @@ def generate_launch_description():
     if uav_type == "" or uav_type != "x500":
         print("The uav type dont set up in yours enviroment variables")
         return
+
+    estimation_topic = ""
+    if estimation_source == "GNSS":
+        estimation_topic = '/' + uav_name + '/estimation_manager/estimation'
+    elif estimation_source == "VIO":
+        estimation_topic = '/' + uav_name + '/vins_republisher/odometry'
+    elif estimation_source == "LIO":
+        # estimation_topic = '/' + uav_name + '/fast_lio/odometry'
+        estimation_topic = '/Odometry_high_freq'
 
     # Declare arguments
     declared_arguments = []
@@ -71,7 +81,7 @@ def generate_launch_description():
         output='screen',
         parameters=[control_manager_file, agile_planner_file, nmpc_controller_file],
         remappings=[
-            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/odometry_in', estimation_topic),
             ('/' + uav_name + '/goto_in', '/' + uav_name + '/control_manager/goto'),
             ('/' + uav_name + '/trajectory_path_in', '/' + uav_name + '/control_manager/trajectory_path'),
             ('/' + uav_name + '/planner_view_out', '/' + uav_name + '/control_manager/planner_view'),
