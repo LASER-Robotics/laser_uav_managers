@@ -39,6 +39,9 @@ def generate_launch_description():
     elif estimation_source == "LIO":
         # estimation_topic = '/' + uav_name + '/fast_lio/odometry'
         estimation_topic = '/Odometry_high_freq'
+    else:
+        print("The uav estimation source dont exist")
+        return
 
     # Declare arguments
     declared_arguments = []
