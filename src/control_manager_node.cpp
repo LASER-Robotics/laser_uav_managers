@@ -6,6 +6,8 @@ namespace laser_uav_managers
 ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode("control_manager", "", options) {
   RCLCPP_INFO(get_logger(), "Creating");
 
+  declare_parameter("agile_fly", rclcpp::ParameterValue(false));
+
   declare_parameter("rate.loop_control", rclcpp::ParameterValue(1.0));
   declare_parameter("rate.diagnostics", rclcpp::ParameterValue(1.0));
 
@@ -44,6 +46,8 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("nmpc_controller.quadrotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
   declare_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
 
+  declare_parameter("nmpc_controller.acados_parameters.N", rclcpp::ParameterValue(0));
+  declare_parameter("nmpc_controller.acados_parameters.dt", rclcpp::ParameterValue(0.0));
   declare_parameter("nmpc_controller.acados_parameters.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
   declare_parameter("nmpc_controller.acados_parameters.R", rclcpp::ParameterValue(0.0));
 
@@ -122,6 +126,8 @@ CallbackReturn ControlManagerNode::on_shutdown([[maybe_unused]] const rclcpp_lif
 void ControlManagerNode::getParameters() {
   rclcpp::Parameter aux;
 
+  get_parameter("agile_fly", _agile_fly_);
+
   get_parameter("rate.loop_control", _rate_loop_control_);
   /* get_parameter("rate.diagnostics", ); */
 
@@ -176,6 +182,9 @@ void ControlManagerNode::getParameters() {
   get_parameter("nmpc_controller.quadrotor_parameters.thrust_min", _quadrotor_params_.thrust_min);
   get_parameter("nmpc_controller.quadrotor_parameters.thrust_max", _quadrotor_params_.thrust_max);
   get_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", _quadrotor_params_.total_thrust_max);
+
+  get_parameter("nmpc_controller.acados_parameters.N", _acados_params_.N);
+  get_parameter("nmpc_controller.acados_parameters.dt", _acados_params_.dt);
 
   get_parameter("nmpc_controller.acados_parameters.Q", aux);
   _acados_params_.Q = aux.as_double_array();
@@ -261,6 +270,7 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
+    desired_path_ = msg.waypoints;
   }
 }
 //}
@@ -347,14 +357,41 @@ void ControlManagerNode::tmrLoopControl() {
     return;
   }
 
-  std::vector<laser_msgs::msg::ReferenceState> current_trajectory_waypoints = agile_planner_.getTrajectory(30);
-  last_waypoint_                                                            = current_trajectory_waypoints[0];
+  if (!_agile_fly_) {
+    if (desired_path_.size() > 0) {
+      if (!(last_waypoint_.pose.position.x == desired_path_[0].position.x && last_waypoint_.pose.position.y == desired_path_[0].position.y &&
+            last_waypoint_.pose.position.z == desired_path_[0].position.z)) {
+        current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N);
+        last_waypoint_        = current_horizon_path_[0];
+
+        current_horizon_path_[0].twist.linear.x = 0;
+        current_horizon_path_[0].twist.linear.y = 0;
+        current_horizon_path_[0].twist.linear.z = 0;
+
+        lock_waypoint_ = 0;
+      } else {
+        if (sqrt(pow(odometry_.pose.pose.position.x - desired_path_[0].position.x, 2) + pow(odometry_.pose.pose.position.y - desired_path_[0].position.y, 2) +
+                 pow(odometry_.pose.pose.position.z - desired_path_[0].position.z, 2)) < 0.15 &&
+            lock_waypoint_ > 50) {
+          desired_path_.erase(desired_path_.begin());
+        } else {
+          lock_waypoint_++;
+        }
+      }
+    } else {
+      current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N);
+      last_waypoint_        = current_horizon_path_[0];
+    }
+  } else {
+    current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N);
+    last_waypoint_        = current_horizon_path_[0];
+  }
 
   std::cout << "Current Waypoint: x: " << last_waypoint_.pose.position.x << ", y: " << last_waypoint_.pose.position.y
             << ", z:" << last_waypoint_.pose.position.z << ", w: " << last_waypoint_.pose.orientation.w << ", x: " << last_waypoint_.pose.orientation.x
             << ", y: " << last_waypoint_.pose.orientation.y << ", z: " << last_waypoint_.pose.orientation.z << std::endl;
 
-  laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_trajectory_waypoints, odometry_);
+  laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
   pub_attitude_rates_and_thrust_reference_->publish(msg);
   pub_current_waypoint_->publish(last_waypoint_);
 
@@ -369,7 +406,6 @@ void ControlManagerNode::tmrLoopControl() {
     if (odometry_.pose.pose.position.z - 0.0 <= 0.3) {
       requested_land_ = false;
       land_done_      = true;
-      /* lock_control_inputs_ = true; */
     }
   }
 }

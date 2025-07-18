@@ -75,8 +75,10 @@ private:
   rclcpp::TimerBase::SharedPtr tmr_diagnostics_;
   void                         tmrDiagnostics();
 
-  nav_msgs::msg::Odometry         odometry_;
-  laser_msgs::msg::ReferenceState last_waypoint_;
+  nav_msgs::msg::Odometry                      odometry_;
+  laser_msgs::msg::ReferenceState              last_waypoint_;
+  std::vector<geometry_msgs::msg::Pose>        desired_path_;
+  std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
 
   laser_uav_planner::pmm_t        _pmm_params_;
   laser_uav_planner::AgilePlanner agile_planner_;
@@ -86,6 +88,9 @@ private:
   laser_uav_controllers::NmpcController nmpc_controller_;
 
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::ReferenceState>::SharedPtr pub_current_waypoint_;
+
+  int lock_waypoint_;
+  bool _agile_fly_;
 
   double _takeoff_height_;
   double _takeoff_speed_;

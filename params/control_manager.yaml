@@ -7,3 +7,5 @@
     takeoff:
       height: 1.5 # m
       speed: 1.0 # m/s
+
+    agile_fly: false
