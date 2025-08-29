@@ -33,12 +33,11 @@ def generate_launch_description():
 
     estimation_topic = ""
     if estimation_source == "GNSS":
-        estimation_topic = '/' + uav_name + '/estimation_manager/estimation'
+        estimation_topic = '/' + uav_name + '/px4_api/odometry'
     elif estimation_source == "VIO":
         estimation_topic = '/' + uav_name + '/vins_republisher/odometry'
     elif estimation_source == "LIO":
-        # estimation_topic = '/' + uav_name + '/fast_lio/odometry'
-        estimation_topic = '/Odometry_high_freq'
+        estimation_topic = '/' + uav_name + '/fast_lio/odometry'
     else:
         print("The uav estimation source dont exist")
         return
