@@ -51,7 +51,9 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("nmpc_controller.acados_parameters.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
   declare_parameter("nmpc_controller.acados_parameters.R", rclcpp::ParameterValue(0.0));
 
-  odometry_ = nav_msgs::msg::Odometry();
+  odometry_           = nav_msgs::msg::Odometry();
+  diagnostics_        = laser_msgs::msg::UavControlDiagnostics();
+  diagnostics_.is_fly = false;
 }
 //}
 
@@ -79,7 +81,7 @@ CallbackReturn ControlManagerNode::on_activate([[maybe_unused]] const rclcpp_lif
   RCLCPP_INFO(get_logger(), "Activating");
 
   pub_attitude_rates_and_thrust_reference_->on_activate();
-  pub_current_waypoint_->on_activate();
+  pub_diagnostics_->on_activate();
 
   is_active_ = true;
 
@@ -92,6 +94,7 @@ CallbackReturn ControlManagerNode::on_deactivate([[maybe_unused]] const rclcpp_l
   RCLCPP_INFO(get_logger(), "Deactivating");
 
   pub_attitude_rates_and_thrust_reference_->on_deactivate();
+  pub_diagnostics_->on_deactivate();
 
   is_active_ = false;
 
@@ -104,6 +107,7 @@ CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_life
   RCLCPP_INFO(get_logger(), "Cleaning up");
 
   pub_attitude_rates_and_thrust_reference_.reset();
+  pub_diagnostics_.reset();
 
   sub_odometry_.reset();
   sub_goto_.reset();
@@ -129,7 +133,7 @@ void ControlManagerNode::getParameters() {
   get_parameter("agile_fly", _agile_fly_);
 
   get_parameter("rate.loop_control", _rate_loop_control_);
-  /* get_parameter("rate.diagnostics", ); */
+  get_parameter("rate.diagnostics", _rate_diagnostics_);
 
   get_parameter("takeoff.height", _takeoff_height_);
   get_parameter("takeoff.speed", _takeoff_speed_);
@@ -205,7 +209,7 @@ void ControlManagerNode::configPubSub() {
                                                                               std::bind(&ControlManagerNode::subTrajectoryPath, this, std::placeholders::_1));
 
   pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
-  pub_current_waypoint_                    = create_publisher<laser_msgs::msg::ReferenceState>("planner_view_out", 10);
+  pub_diagnostics_                         = create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
 }
 //}
 
@@ -216,8 +220,7 @@ void ControlManagerNode::configTimers() {
   tmr_loop_control_ =
       create_wall_timer(std::chrono::duration<double>(1.0 / _rate_loop_control_), std::bind(&ControlManagerNode::tmrLoopControl, this), nullptr);
 
-  /* tmr_diagnostics_ = create_wall_timer(std::chrono::duration<double>(1.0 / _rate_diagnostics_), std::bind(&ControlManagerNode::tmrDiagnostics, this),
-   * nullptr); */
+  tmr_diagnostics_ = create_wall_timer(std::chrono::duration<double>(1.0 / _rate_diagnostics_), std::bind(&ControlManagerNode::tmrDiagnostics, this), nullptr);
 }
 //}
 
@@ -387,25 +390,26 @@ void ControlManagerNode::tmrLoopControl() {
     last_waypoint_        = current_horizon_path_[0];
   }
 
-  std::cout << "Current Waypoint: x: " << last_waypoint_.pose.position.x << ", y: " << last_waypoint_.pose.position.y
-            << ", z:" << last_waypoint_.pose.position.z << ", w: " << last_waypoint_.pose.orientation.w << ", x: " << last_waypoint_.pose.orientation.x
-            << ", y: " << last_waypoint_.pose.orientation.y << ", z: " << last_waypoint_.pose.orientation.z << std::endl;
-
   laser_msgs::msg::AttitudeRatesAndThrust msg = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
   pub_attitude_rates_and_thrust_reference_->publish(msg);
-  pub_current_waypoint_->publish(last_waypoint_);
+
+  diagnostics_.last_control_input.unit_of_measurement = "N";
+  diagnostics_.last_control_input.data                = nmpc_controller_.getLastIndividualThrust();
+  diagnostics_.last_planner_waypoint                  = last_waypoint_;
 
   if (requested_takeoff_) {
     if (odometry_.pose.pose.position.z - _takeoff_height_ <= 0.3) {
-      requested_takeoff_ = false;
-      takeoff_done_      = true;
+      requested_takeoff_  = false;
+      takeoff_done_       = true;
+      diagnostics_.is_fly = true;
     }
   }
 
   if (requested_land_) {
     if (odometry_.pose.pose.position.z - 0.0 <= 0.3) {
-      requested_land_ = false;
-      land_done_      = true;
+      requested_land_     = false;
+      land_done_          = true;
+      diagnostics_.is_fly = false;
     }
   }
 }
@@ -416,6 +420,11 @@ void ControlManagerNode::tmrDiagnostics() {
   if (!is_active_) {
     return;
   }
+
+  diagnostics_.header.stamp    = get_clock()->now();
+  diagnostics_.header.frame_id = "";
+
+  pub_diagnostics_->publish(diagnostics_);
 }
 //}
 }  // namespace laser_uav_managers

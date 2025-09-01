@@ -2,10 +2,10 @@
   ros__parameters:
     rate: # Hz
       loop_control: 100.0 
-      diagnostic: 100.0
+      diagnostics: 100.0
 
     takeoff:
       height: 1.5 # m
       speed: 1.0 # m/s
 
-    agile_fly: false
+    agile_fly: true
