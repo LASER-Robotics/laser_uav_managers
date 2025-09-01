@@ -375,7 +375,7 @@ void ControlManagerNode::tmrLoopControl() {
       } else {
         if (sqrt(pow(odometry_.pose.pose.position.x - desired_path_[0].position.x, 2) + pow(odometry_.pose.pose.position.y - desired_path_[0].position.y, 2) +
                  pow(odometry_.pose.pose.position.z - desired_path_[0].position.z, 2)) < 0.15 &&
-            lock_waypoint_ > 50) {
+            lock_waypoint_ > 300) {
           desired_path_.erase(desired_path_.begin());
         } else {
           lock_waypoint_++;
