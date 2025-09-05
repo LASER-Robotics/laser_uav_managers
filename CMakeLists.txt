@@ -62,7 +62,7 @@ add_executable(${executable_name}
   src/control_manager_main.cpp
 )
 
-set(library_name control_manager_core)
+set(library_name ${PROJECT_NAME}_control_manager_core)
 
 add_library(${library_name} SHARED
   src/control_manager_node.cpp
@@ -73,7 +73,7 @@ ament_target_dependencies(${executable_name}
 )
 
 target_link_libraries(${executable_name}
-  control_manager_core
+  ${library_name}
 	${laser_uav_planner}
 	${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so
