@@ -17,11 +17,16 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(tf2 REQUIRED) 
+find_package(tf2_ros REQUIRED)
 find_package(laser_uav_planner REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
+find_package(laser_uav_lib REQUIRED)
+
 
 set(acados_include "$ENV{ACADOS_SOURCE_DIR}/include")
 set(acados_lib "$ENV{ACADOS_SOURCE_DIR}/lib")
@@ -32,9 +37,12 @@ Eigen3
 rclcpp 
 rclcpp_lifecycle 
 rclcpp_components
+sensor_msgs
 nav_msgs 
 std_srvs 
 px4_msgs
+tf2
+tf2_ros
 laser_msgs
 laser_uav_planner
 laser_uav_controllers
@@ -54,11 +62,12 @@ include_directories(
 	${acados_include}/acados/
 	${acados_include}/qpOASES_e/
   ${EIGEN3_INCLUDE_DIR}
+  ${laser_uav_lib_INCLUDE_DIRS}                       
 )
 
-set(executable_name control_manager)
+set(control_executable_name control_manager)
 
-add_executable(${executable_name}
+add_executable(${control_executable_name}
   src/control_manager_main.cpp
 )
 
@@ -68,11 +77,11 @@ add_library(${library_name} SHARED
   src/control_manager_node.cpp
 )
 
-ament_target_dependencies(${executable_name}
+ament_target_dependencies(${control_executable_name}
   ${dependencies}
 )
 
-target_link_libraries(${executable_name}
+target_link_libraries(${control_executable_name}
   ${library_name}
 	${laser_uav_planner}
 	${laser_uav_controllers}
@@ -88,13 +97,43 @@ target_include_directories(${library_name} PRIVATE src/include)
 
 rclcpp_components_register_nodes(${library_name} "laser_uav_managers::ControlManagerNode")
 
-install(TARGETS ${library_name}
+set(estimation_library_name "estimation_manager_node")
+set(estimation_executable_name "estimation_manager_main")
+
+add_library(${estimation_library_name} SHARED
+  src/estimation_manager_node.cpp
+)
+
+ament_target_dependencies(${estimation_library_name}
+  ${dependencies}
+)
+
+target_link_libraries(${estimation_library_name}
+  laser_uav_lib::drone_ekf
+)
+
+add_executable(${estimation_executable_name}
+  src/estimation_manager_main.cpp
+)
+
+ament_target_dependencies(${estimation_executable_name}
+  ${dependencies}
+)
+
+target_link_libraries(${estimation_executable_name}
+  ${estimation_library_name}
+)
+
+rclcpp_components_register_nodes(${estimation_library_name} "laser_uav_managers::EstimationManager")
+
+
+install(TARGETS ${library_name} ${estimation_library_name}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(TARGETS ${executable_name}
+install(TARGETS ${control_executable_name} ${estimation_executable_name}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
