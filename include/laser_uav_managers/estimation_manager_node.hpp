@@ -27,7 +27,7 @@
 #include <deque>
 #include <chrono>
 
-#include <laser_uav_lib/kalman_filter/drone_ekf/drone_ekf.hpp>
+#include <laser_uav_estimator/state_estimator.hpp>
 /*//}*/
 
 /* define //{*/
@@ -250,7 +250,7 @@ namespace laser_uav_managers
     /*//}*/
 
     /* EKF //{ */
-    std::unique_ptr<laser_uav_lib::DroneEKF> ekf_; ///< Unique pointer to the Drone EKF instance.
+    std::unique_ptr<laser_uav_estimator::StateEstimator> ekf_; ///< Unique pointer to the StateEstimator instance.
     /*//}*/
 
     /* ROS COMMUNICATIONS //{ */
@@ -318,8 +318,8 @@ namespace laser_uav_managers
     std::vector<double> motor_positions_;   ///< Motor positions relative to the center of mass.
     std::vector<double> process_noise_vec_; ///< Vector of process noise values for the EKF.
 
-    laser_uav_lib::ProcessNoiseGains process_noise_gains_;         ///< Struct holding process noise gains for the EKF.
-    laser_uav_lib::MeasurementNoiseGains measurement_noise_gains_; ///< Struct holding measurement noise gains for the EKF.
+    laser_uav_estimator::ProcessNoiseGains process_noise_gains_;         ///< Struct holding process noise gains for the EKF.
+    laser_uav_estimator::MeasurementNoiseGains measurement_noise_gains_; ///< Struct holding measurement noise gains for the EKF.
 
     // Sensor-specific synchronization parameters (in seconds)
     double px4_odom_tolerance_;      ///< Synchronization time tolerance for PX4 odometry.

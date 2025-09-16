@@ -25,6 +25,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(laser_uav_planner REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
+find_package(laser_uav_estimator REQUIRED)
 find_package(laser_uav_lib REQUIRED)
 
 
@@ -46,10 +47,13 @@ tf2_ros
 laser_msgs
 laser_uav_planner
 laser_uav_controllers
+laser_uav_estimator
+laser_uav_lib
 )
 
 find_library(laser_uav_planner laser_uav_planner)
 find_library(laser_uav_controllers laser_uav_controllers)
+find_library(laser_uav_estimator laser_uav_estimator)
 
 link_directories(${full_model_build})
 
@@ -62,7 +66,6 @@ include_directories(
 	${acados_include}/acados/
 	${acados_include}/qpOASES_e/
   ${EIGEN3_INCLUDE_DIR}
-  ${laser_uav_lib_INCLUDE_DIRS}                       
 )
 
 set(control_executable_name control_manager)
@@ -109,7 +112,7 @@ ament_target_dependencies(${estimation_library_name}
 )
 
 target_link_libraries(${estimation_library_name}
-  laser_uav_lib::drone_ekf
+  ${laser_uav_estimator}
 )
 
 add_executable(${estimation_executable_name}

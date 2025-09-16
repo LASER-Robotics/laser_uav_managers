@@ -326,8 +326,8 @@ namespace laser_uav_managers
     motor_positions(3, 0) = motor_positions_[6]; // Motor 3 - x
     motor_positions(3, 1) = motor_positions_[7]; // Motor 3 - y
 
-    // Instantiate the DroneEKF object with the drone's physical parameters
-    ekf_ = std::make_unique<laser_uav_lib::DroneEKF>(mass_, motor_positions, thrust_coefficient_, torque_coefficient_, inertia, ekf_verbosity_);
+    // Instantiate the StateEstimator object with the drone's physical parameters
+    ekf_ = std::make_unique<laser_uav_estimator::StateEstimator>(mass_, motor_positions, thrust_coefficient_, torque_coefficient_, inertia, ekf_verbosity_);
 
     RCLCPP_INFO(get_logger(), "Applying noise gains to EKF.");
     // Set the process and measurement noise gains in the EKF
@@ -507,23 +507,23 @@ namespace laser_uav_managers
     const auto &new_odom_pose = newest_msg_it->second->pose.pose;
 
     // Calculate position difference
-    Eigen::Vector3d current_position(current_state(laser_uav_lib::State::PX), current_state(laser_uav_lib::State::PY), current_state(laser_uav_lib::State::PZ));
+    Eigen::Vector3d current_position(current_state(laser_uav_estimator::State::PX), current_state(laser_uav_estimator::State::PY), current_state(laser_uav_estimator::State::PZ));
     Eigen::Vector3d new_odom_position(new_odom_pose.position.x, new_odom_pose.position.y, new_odom_pose.position.z);
     double distance = (current_position - new_odom_position).norm();
 
     // Calculate orientation difference
     Eigen::Quaterniond new_orientation(new_odom_pose.orientation.w, new_odom_pose.orientation.x, new_odom_pose.orientation.y, new_odom_pose.orientation.z);
-    Eigen::Quaterniond current_orientation(current_state(laser_uav_lib::State::QW), current_state(laser_uav_lib::State::QX), current_state(laser_uav_lib::State::QY), current_state(laser_uav_lib::State::QZ));
+    Eigen::Quaterniond current_orientation(current_state(laser_uav_estimator::State::QW), current_state(laser_uav_estimator::State::QX), current_state(laser_uav_estimator::State::QY), current_state(laser_uav_estimator::State::QZ));
     double angle_diff = ekf_->calculate_custom_attitude_error(current_orientation, new_orientation).norm();
 
     // Calculate linear velocity difference
     Eigen::Vector3d new_odom_linear_velocity(newest_msg_it->second->twist.twist.linear.x, newest_msg_it->second->twist.twist.linear.y, newest_msg_it->second->twist.twist.linear.z);
-    Eigen::Vector3d current_linear_velocity(current_state(laser_uav_lib::State::VX), current_state(laser_uav_lib::State::VY), current_state(laser_uav_lib::State::VZ));
+    Eigen::Vector3d current_linear_velocity(current_state(laser_uav_estimator::State::VX), current_state(laser_uav_estimator::State::VY), current_state(laser_uav_estimator::State::VZ));
     double velocity_diff = (current_linear_velocity - new_odom_linear_velocity).norm();
 
     // Calculate angular velocity difference
     Eigen::Vector3d new_odom_angular_velocity(newest_msg_it->second->twist.twist.angular.x, newest_msg_it->second->twist.twist.angular.y, newest_msg_it->second->twist.twist.angular.z);
-    Eigen::Vector3d current_angular_velocity(current_state(laser_uav_lib::State::WX), current_state(laser_uav_lib::State::WY), current_state(laser_uav_lib::State::WZ));
+    Eigen::Vector3d current_angular_velocity(current_state(laser_uav_estimator::State::WX), current_state(laser_uav_estimator::State::WY), current_state(laser_uav_estimator::State::WZ));
     double angular_velocity_diff = (current_angular_velocity - new_odom_angular_velocity).norm();
 
     // Compare the differences with the defined thresholds
@@ -707,7 +707,7 @@ namespace laser_uav_managers
       }
 
       // --- EKF Correction Step ---
-      laser_uav_lib::MeasurementPackage pkg;
+      laser_uav_estimator::MeasurementPackage pkg;
       bool has_measurement{false};
       // Use the measurement from the currently active odometry source
       if (px4_odom_msg && enable_px4_odom_)
@@ -845,21 +845,21 @@ namespace laser_uav_managers
       odom_out_msg.header.frame_id = fast_lio_odom_data_.buffer.begin()->second->header.frame_id;
 
     // Fill the pose fields (position and orientation)
-    odom_out_msg.pose.pose.position.x = state(laser_uav_lib::State::PX);
-    odom_out_msg.pose.pose.position.y = state(laser_uav_lib::State::PY);
-    odom_out_msg.pose.pose.position.z = state(laser_uav_lib::State::PZ);
-    odom_out_msg.pose.pose.orientation.w = state(laser_uav_lib::State::QW);
-    odom_out_msg.pose.pose.orientation.x = state(laser_uav_lib::State::QX);
-    odom_out_msg.pose.pose.orientation.y = state(laser_uav_lib::State::QY);
-    odom_out_msg.pose.pose.orientation.z = state(laser_uav_lib::State::QZ);
+    odom_out_msg.pose.pose.position.x = state(laser_uav_estimator::State::PX);
+    odom_out_msg.pose.pose.position.y = state(laser_uav_estimator::State::PY);
+    odom_out_msg.pose.pose.position.z = state(laser_uav_estimator::State::PZ);
+    odom_out_msg.pose.pose.orientation.w = state(laser_uav_estimator::State::QW);
+    odom_out_msg.pose.pose.orientation.x = state(laser_uav_estimator::State::QX);
+    odom_out_msg.pose.pose.orientation.y = state(laser_uav_estimator::State::QY);
+    odom_out_msg.pose.pose.orientation.z = state(laser_uav_estimator::State::QZ);
 
     // Fill the twist fields (linear and angular velocities)
-    odom_out_msg.twist.twist.linear.x = state(laser_uav_lib::State::VX);
-    odom_out_msg.twist.twist.linear.y = state(laser_uav_lib::State::VY);
-    odom_out_msg.twist.twist.linear.z = state(laser_uav_lib::State::VZ);
-    odom_out_msg.twist.twist.angular.x = state(laser_uav_lib::State::WX);
-    odom_out_msg.twist.twist.angular.y = state(laser_uav_lib::State::WY);
-    odom_out_msg.twist.twist.angular.z = state(laser_uav_lib::State::WZ);
+    odom_out_msg.twist.twist.linear.x = state(laser_uav_estimator::State::VX);
+    odom_out_msg.twist.twist.linear.y = state(laser_uav_estimator::State::VY);
+    odom_out_msg.twist.twist.linear.z = state(laser_uav_estimator::State::VZ);
+    odom_out_msg.twist.twist.angular.x = state(laser_uav_estimator::State::WX);
+    odom_out_msg.twist.twist.angular.y = state(laser_uav_estimator::State::WY);
+    odom_out_msg.twist.twist.angular.z = state(laser_uav_estimator::State::WZ);
 
     // Copy the relevant covariance submatrices from the EKF to the 6x6 ROS message arrays
     for (int i = 0; i < 6; ++i)
