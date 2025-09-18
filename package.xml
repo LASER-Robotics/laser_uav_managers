@@ -22,10 +22,10 @@
   <depend>tf2_ros</depend>
   <depend>geometry_msgs</depend>
   <depend>std_srvs</depend>
-  <depend>laser_uav_planner</depend>
+  <depend>laser_uav_planners</depend>
   <depend>laser_uav_controllers</depend>
   <depend>laser_uav_lib</depend>
-  <depend>laser_uav_estimator</depend>
+  <depend>laser_uav_estimators</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

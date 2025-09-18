@@ -58,7 +58,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'agile_planner_file',
-            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_planner'), 'params', 'agile_planner', uav_type + '.yaml']),
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_planners'), 'params', 'agile_planner', uav_type + '.yaml']),
             description='Full path to the file with the all parameters.'
         )
     )

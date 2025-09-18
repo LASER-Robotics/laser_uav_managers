@@ -24,9 +24,9 @@ find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(tf2 REQUIRED) 
 find_package(tf2_ros REQUIRED)
-find_package(laser_uav_planner REQUIRED)
+find_package(laser_uav_planners REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
-find_package(laser_uav_estimator REQUIRED)
+find_package(laser_uav_estimators REQUIRED)
 find_package(laser_uav_lib REQUIRED)
 
 
@@ -46,16 +46,16 @@ px4_msgs
 tf2
 tf2_ros
 laser_msgs
-laser_uav_planner
+laser_uav_planners
 laser_uav_controllers
-laser_uav_estimator
+laser_uav_estimators
 laser_uav_lib
 )
 
 find_library(laser_uav_lib laser_uav_lib)
-find_library(laser_uav_planner laser_uav_planner)
+find_library(laser_uav_planners laser_uav_planners)
 find_library(laser_uav_controllers laser_uav_controllers)
-find_library(laser_uav_estimator laser_uav_estimator)
+find_library(laser_uav_estimators laser_uav_estimators)
 
 link_directories(${full_model_build})
 
@@ -89,7 +89,7 @@ ament_target_dependencies(${control_executable_name}
 
 target_link_libraries(${control_executable_name}
   ${library_name}
-	${laser_uav_planner}
+	${laser_uav_planners}
 	${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so
 	${acados_lib}/libacados.so
@@ -115,7 +115,7 @@ ament_target_dependencies(${estimation_library_name}
 )
 
 target_link_libraries(${estimation_library_name}
-  ${laser_uav_estimator}
+  ${laser_uav_estimators}
 )
 
 add_executable(${estimation_executable_name}

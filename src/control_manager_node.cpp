@@ -310,7 +310,7 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
-  agile_planner_   = laser_uav_planner::AgilePlanner(_planner_quadrotor_params_, _pmm_params_);
+  agile_planner_   = laser_uav_planners::AgilePlanner(_planner_quadrotor_params_, _pmm_params_);
   nmpc_controller_ = laser_uav_controllers::NmpcController(_controller_quadrotor_params_, _acados_params_);
   if (!angular_rates_and_thrust_mode_) {
     btw_gyro_x_ = laser_uav_lib::IIRFilter(_gyro_a_, _gyro_b_);

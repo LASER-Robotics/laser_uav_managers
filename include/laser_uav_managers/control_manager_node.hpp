@@ -21,7 +21,7 @@
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
 
-#include <laser_uav_planner/agile_planner.hpp>
+#include <laser_uav_planners/agile_planner.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
 #include <laser_uav_controllers/indi_controller.hpp>
 
@@ -99,9 +99,9 @@ private:
   std::vector<geometry_msgs::msg::Pose>        desired_path_;
   std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
 
-  laser_uav_planner::quadrotor_t  _planner_quadrotor_params_;
-  laser_uav_planner::pmm_t        _pmm_params_;
-  laser_uav_planner::AgilePlanner agile_planner_;
+  laser_uav_planners::quadrotor_t  _planner_quadrotor_params_;
+  laser_uav_planners::pmm_t        _pmm_params_;
+  laser_uav_planners::AgilePlanner agile_planner_;
 
   laser_uav_controllers::quadrotor_t    _controller_quadrotor_params_;
   laser_uav_controllers::acados_t       _acados_params_;
