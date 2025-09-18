@@ -1,7 +1,8 @@
 /**:
   ros__parameters:
     rate: # Hz
-      loop_control: 100.0 
+      external_loop_control: 100.0 
+      internal_loop_control: 250.0 
       diagnostics: 100.0
 
     takeoff:
@@ -9,3 +10,11 @@
       speed: 1.0 # m/s
 
     agile_fly: true
+
+    filter_params:
+      butterworth:
+        gyro_a: [1.0000, -1.5782, 0.6528]
+        gyro_b: [0.018650, 0.037301, 0.018650]
+
+        motor_a: [1.0000, -1.5782, 0.6528]
+        motor_b: [0.018650, 0.037301, 0.018650]

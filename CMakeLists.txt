@@ -16,10 +16,12 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(laser_uav_lib REQUIRED)
 find_package(laser_uav_planner REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
 
@@ -32,6 +34,7 @@ Eigen3
 rclcpp 
 rclcpp_lifecycle 
 rclcpp_components
+sensor_msgs
 nav_msgs 
 std_srvs 
 px4_msgs
@@ -40,6 +43,7 @@ laser_uav_planner
 laser_uav_controllers
 )
 
+find_library(laser_uav_lib laser_uav_lib)
 find_library(laser_uav_planner laser_uav_planner)
 find_library(laser_uav_controllers laser_uav_controllers)
 
@@ -47,6 +51,7 @@ link_directories(${full_model_build})
 
 include_directories(
   include
+  ${laser_uav_lib_INCLUDE_DIRS}
   ${full_model_build}
 	${acados_include}
 	${acados_include}/blasfeo/include/
@@ -74,6 +79,7 @@ ament_target_dependencies(${executable_name}
 
 target_link_libraries(${executable_name}
   ${library_name}
+  laser_uav_lib::filter
 	${laser_uav_planner}
 	${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so
