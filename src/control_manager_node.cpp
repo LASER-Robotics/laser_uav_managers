@@ -23,6 +23,7 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
 
   declare_parameter("agile_planner.quadrotor_parameters.max_acc", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.quadrotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
+  declare_parameter("agile_planner.quadrotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
 
   declare_parameter("agile_planner.ltd_opt.use_drag", rclcpp::ParameterValue(false));
   declare_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", rclcpp::ParameterValue(0.0));
@@ -182,6 +183,7 @@ void ControlManagerNode::getParameters() {
 
   get_parameter("agile_planner.quadrotor_parameters.max_acc", _pmm_params_.max_acc_norm);
   get_parameter("agile_planner.quadrotor_parameters.max_vel", _pmm_params_.max_vel_norm);
+  get_parameter("agile_planner.quadrotor_parameters.default_vel", _pmm_params_.default_vel_norm);
 
   get_parameter("agile_planner.ltd_opt.use_drag", _pmm_params_.use_drag);
   get_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", _pmm_params_.thrust_decomp_acc_precision);
@@ -262,7 +264,7 @@ void ControlManagerNode::configPubSub() {
   RCLCPP_INFO(get_logger(), "initPubSub");
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
-  sub_goto_     = create_subscription<geometry_msgs::msg::Pose>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
+  sub_goto_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
   sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
       "api_diagnostics_in", 1, std::bind(&ControlManagerNode::subApiDiagnostics, this, std::placeholders::_1));
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>("trajectory_path_in", 1,
@@ -333,6 +335,9 @@ void ControlManagerNode::subOdometry(const nav_msgs::msg::Odometry &msg) {
   }
 
   odometry_ = msg;
+
+  diagnostics_.current_norm_speed =
+      sqrt(pow(odometry_.twist.twist.linear.x, 2) + pow(odometry_.twist.twist.linear.y, 2) + pow(odometry_.twist.twist.linear.z, 2));
 }
 //}
 
@@ -372,7 +377,6 @@ void ControlManagerNode::subApiDiagnostics(const laser_msgs::msg::ApiPx4Diagnost
   }
 
   if (msg.armed && requested_takeoff_ && msg.offboard_mode) {
-    /* if (requested_takeoff_ && msg.offboard_mode) { */
     lock_control_inputs_ = false;
   }
 }
@@ -392,7 +396,7 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
 //}
 
 /* subGoto() //{ */
-void ControlManagerNode::subGoto(const geometry_msgs::msg::Pose &msg) {
+void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
   if (!is_active_) {
     return;
   }
@@ -422,9 +426,12 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     laser_msgs::msg::ReferenceState ground_waypoint;
     ground_waypoint.pose = odometry_.pose.pose;
 
-    geometry_msgs::msg::Pose takeoff_waypoint;
-    takeoff_waypoint            = ground_waypoint.pose;
+    laser_msgs::msg::PoseWithHeading takeoff_waypoint;
+    takeoff_waypoint.position   = ground_waypoint.pose.position;
     takeoff_waypoint.position.z = _takeoff_height_;
+
+    Eigen::Quaterniond q(ground_waypoint.pose.orientation.w, ground_waypoint.pose.orientation.x, ground_waypoint.pose.orientation.y, ground_waypoint.pose.orientation.z);
+    takeoff_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
 
@@ -452,9 +459,12 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
     laser_msgs::msg::ReferenceState current_pose;
     current_pose.pose = odometry_.pose.pose;
 
-    geometry_msgs::msg::Pose land_waypoint;
-    land_waypoint            = odometry_.pose.pose;
+    laser_msgs::msg::PoseWithHeading land_waypoint;
+    land_waypoint.position   = odometry_.pose.pose.position;
     land_waypoint.position.z = -0.2;
+
+    Eigen::Quaterniond q(current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z);
+    land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
 
     agile_planner_.generateTrajectory(current_pose, land_waypoint, 0.2, true);
 

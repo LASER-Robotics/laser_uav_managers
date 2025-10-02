@@ -14,6 +14,7 @@
 
 #include <laser_msgs/msg/uav_control_diagnostics.hpp>
 #include <laser_msgs/msg/reference_state.hpp>
+#include <laser_msgs/msg/pose_with_heading.hpp>
 #include <laser_msgs/msg/api_px4_diagnostics.hpp>
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 #include <laser_msgs/msg/trajectory_path.hpp>
@@ -63,8 +64,8 @@ private:
   rclcpp::Subscription<laser_msgs::msg::MotorSpeed>::ConstSharedPtr sub_motor_speed_;
   void                                                              subMotorSpeed(const laser_msgs::msg::MotorSpeed &msg);
 
-  rclcpp::Subscription<geometry_msgs::msg::Pose>::ConstSharedPtr sub_goto_;
-  void                                                           subGoto(const geometry_msgs::msg::Pose &msg);
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
+  void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
 
   rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
   void                                                                  subTrajectoryPath(const laser_msgs::msg::TrajectoryPath &msg);
@@ -93,11 +94,11 @@ private:
   rclcpp::TimerBase::SharedPtr                                                            tmr_diagnostics_;
   void                                                                                    tmrDiagnostics();
 
-  laser_msgs::msg::UavControlDiagnostics       diagnostics_;
-  nav_msgs::msg::Odometry                      odometry_;
-  laser_msgs::msg::ReferenceState              last_waypoint_;
-  std::vector<geometry_msgs::msg::Pose>        desired_path_;
-  std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
+  laser_msgs::msg::UavControlDiagnostics        diagnostics_;
+  nav_msgs::msg::Odometry                       odometry_;
+  laser_msgs::msg::ReferenceState               last_waypoint_;
+  std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
+  std::vector<laser_msgs::msg::ReferenceState>  current_horizon_path_;
 
   laser_uav_planners::quadrotor_t  _planner_quadrotor_params_;
   laser_uav_planners::pmm_t        _pmm_params_;
