@@ -475,7 +475,7 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     laser_msgs::msg::PoseWithHeading land_waypoint;
     land_waypoint.position   = odometry_.pose.pose.position;
-    land_waypoint.position.z = -30.0;
+    land_waypoint.position.z = -1.0;
 
     Eigen::Quaterniond q(current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z);
     land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
@@ -564,6 +564,15 @@ void ControlManagerNode::tmrExternalLoopControl() {
       land_done_          = true;
       diagnostics_.is_fly = false;
       RCLCPP_INFO(this->get_logger(), "Landing Done!, Detected land with estimated mass: %.3f", estimated_mass_for_detect_landing_);
+    } else if (agile_planner_.isHover()) {
+      laser_msgs::msg::PoseWithHeading land_waypoint;
+      land_waypoint.position = last_waypoint_.pose.position;
+      Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
+                           last_waypoint_.pose.orientation.z);
+      land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
+      land_waypoint.position.z += -1.0;
+
+      agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
     }
   }
 }
