@@ -328,6 +328,13 @@ void ControlManagerNode::configClasses() {
 }
 //}
 
+/* quaternionToHeading() //{ */
+double ControlManagerNode::quaternionToHeading(const Eigen::Quaterniond &q) {
+  Eigen::Vector3d heading_vector = q * Eigen::Vector3d::UnitX();
+  return std::atan2(heading_vector.y(), heading_vector.x());
+}
+//}
+
 /* subOdometry() //{ */
 void ControlManagerNode::subOdometry(const nav_msgs::msg::Odometry &msg) {
   if (!is_active_) {
@@ -446,7 +453,7 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     Eigen::Quaterniond q(ground_waypoint.pose.orientation.w, ground_waypoint.pose.orientation.x, ground_waypoint.pose.orientation.y,
                          ground_waypoint.pose.orientation.z);
     q.normalize();
-    takeoff_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
+    takeoff_waypoint.heading = quaternionToHeading(q);
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
 
@@ -480,7 +487,7 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     Eigen::Quaterniond q(current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z);
     q.normalize();
-    land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
+    land_waypoint.heading = quaternionToHeading(q);
 
     agile_planner_.generateTrajectory(current_pose, land_waypoint, 0.2, true);
 
@@ -572,7 +579,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
                            last_waypoint_.pose.orientation.z);
       q.normalize();
-      land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
+      land_waypoint.heading = quaternionToHeading(q);
       land_waypoint.position.z += -1.0;
 
       agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);

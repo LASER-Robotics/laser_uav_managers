@@ -49,11 +49,12 @@ private:
 
   rclcpp::CallbackGroup::SharedPtr callback_group_;
 
-  void getParameters();
-  void configPubSub();
-  void configTimers();
-  void configServices();
-  void configClasses();
+  void   getParameters();
+  void   configPubSub();
+  void   configTimers();
+  void   configServices();
+  void   configClasses();
+  double quaternionToHeading(const Eigen::Quaterniond &q);
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
