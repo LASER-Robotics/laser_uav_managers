@@ -335,9 +335,9 @@ void ControlManagerNode::subOdometry(const nav_msgs::msg::Odometry &msg) {
   }
 
   odometry_ = msg;
-
   diagnostics_.current_norm_speed =
       sqrt(pow(odometry_.twist.twist.linear.x, 2) + pow(odometry_.twist.twist.linear.y, 2) + pow(odometry_.twist.twist.linear.z, 2));
+  received_first_odometry_msg_ = true;
 }
 //}
 
@@ -391,6 +391,9 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
     desired_path_ = msg.waypoints;
+    RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
+  } else {
+    RCLCPP_WARN(this->get_logger(), "Trajectory not will executed, because the uav is not flying.");
   }
 }
 //}
@@ -403,6 +406,9 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
+    RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
+  } else {
+    RCLCPP_WARN(this->get_logger(), "GOTO's Point not will executed, because the uav is not flying.");
   }
 }
 //}
@@ -411,6 +417,13 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
 void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
                                     [[maybe_unused]] std::shared_ptr<std_srvs::srv::Trigger::Response>      response) {
   if (!is_active_) {
+    return;
+  }
+
+  if (!received_first_odometry_msg_) {
+    response->success = false;
+    response->message = "takeoff requested failed, odometry msg not received";
+    RCLCPP_ERROR(this->get_logger(), "Takeoff requested failed, because the odometry msg not received!");
     return;
   }
 
@@ -430,7 +443,8 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     takeoff_waypoint.position   = ground_waypoint.pose.position;
     takeoff_waypoint.position.z = _takeoff_height_;
 
-    Eigen::Quaterniond q(ground_waypoint.pose.orientation.w, ground_waypoint.pose.orientation.x, ground_waypoint.pose.orientation.y, ground_waypoint.pose.orientation.z);
+    Eigen::Quaterniond q(ground_waypoint.pose.orientation.w, ground_waypoint.pose.orientation.x, ground_waypoint.pose.orientation.y,
+                         ground_waypoint.pose.orientation.z);
     takeoff_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
@@ -461,7 +475,7 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     laser_msgs::msg::PoseWithHeading land_waypoint;
     land_waypoint.position   = odometry_.pose.pose.position;
-    land_waypoint.position.z = -0.2;
+    land_waypoint.position.z = -30.0;
 
     Eigen::Quaterniond q(current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z);
     land_waypoint.heading = (q.toRotationMatrix().eulerAngles(2, 1, 0))[0];
@@ -519,6 +533,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
   diagnostics_.last_planner_waypoint = last_waypoint_;
 
   if (angular_rates_and_thrust_mode_) {
+    estimated_mass_for_detect_landing_ = (1 / 9.81) * nmpc_control_input_(0);
+
     laser_msgs::msg::AttitudeRatesAndThrust msg;
     msg.total_thrust_normalized =
         laser_uav_controllers::thrustToThrotle(_controller_quadrotor_params_.motor_curve_a, _controller_quadrotor_params_.motor_curve_b,
@@ -533,18 +549,21 @@ void ControlManagerNode::tmrExternalLoopControl() {
   }
 
   if (requested_takeoff_) {
-    if (odometry_.pose.pose.position.z - _takeoff_height_ <= 0.3) {
+    if (abs(odometry_.pose.pose.position.z - _takeoff_height_) <= 0.3) {
       requested_takeoff_  = false;
       takeoff_done_       = true;
       diagnostics_.is_fly = true;
+      RCLCPP_INFO(this->get_logger(), "Takeoff Done!");
     }
   }
 
   if (requested_land_) {
-    if (odometry_.pose.pose.position.z - 0.0 <= 0.3) {
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2500, "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
+    if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * 0.70) {
       requested_land_     = false;
       land_done_          = true;
       diagnostics_.is_fly = false;
+      RCLCPP_INFO(this->get_logger(), "Landing Done!, Detected land with estimated mass: %.3f", estimated_mass_for_detect_landing_);
     }
   }
 }
@@ -564,6 +583,8 @@ void ControlManagerNode::tmrInternalLoopControl() {
     Eigen::VectorXd indi_thrust =
         indi_controller_.getCorrection(angular_acceleration_estimated_, motor_speed_estimated_, nmpc_control_input_, last_angular_speed_);
 
+    estimated_mass_for_detect_landing_ = (1 / 9.81) * indi_thrust.sum();
+
     diagnostics_.last_control_input.unit_of_measurement = "N";
     diagnostics_.last_control_input.data                = std::vector<double>(indi_thrust.data(), indi_thrust.data() + indi_thrust.size());
 
@@ -573,6 +594,7 @@ void ControlManagerNode::tmrInternalLoopControl() {
                                                                 indi_thrust(i), _controller_quadrotor_params_.thrust_max,
                                                                 _controller_quadrotor_params_.thrust_min));
     }
+
     pub_motor_speed_reference_->publish(msg);
   }
 }

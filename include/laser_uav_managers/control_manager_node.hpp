@@ -124,12 +124,15 @@ private:
   Eigen::Vector3d last_angular_speed_;
   Eigen::Vector3d angular_acceleration_estimated_;
 
+  double estimated_mass_for_detect_landing_;
+
   int  lock_waypoint_;
   bool _agile_fly_;
 
   double _takeoff_height_;
   double _takeoff_speed_;
 
+  bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
   bool have_nmpc_control_input_{false};
