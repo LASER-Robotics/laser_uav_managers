@@ -22,12 +22,14 @@ def generate_launch_description():
     uav_name = os.environ['UAV_NAME']
     uav_type = os.environ['UAV_TYPE']
     estimation_source = os.environ['UAV_ESTIMATION_SOURCE']
+    
+    defaults_uavs = ["x500", "lr7pro"]
 
     if uav_name == "":
         print("The uav name dont set up in yours enviroment variables")
         return
 
-    if uav_type == "" or uav_type != "x500":
+    if uav_type == "" or (not uav_type in defaults_uavs):
         print("The uav type dont set up in yours enviroment variables")
         return
 
@@ -40,8 +42,6 @@ def generate_launch_description():
         estimation_topic = '/' + uav_name + '/fast_lio/odometry'
     elif estimation_source == "EstimationManager":
         estimation_topic = '/' + uav_name + '/estimation_manager/estimation'
-    elif estimation_source == "GroundTruth":
-        estimation_topic = '/' + uav_name + '/ground_truth'
     else:
         print("The uav estimation source dont exist")
         return
