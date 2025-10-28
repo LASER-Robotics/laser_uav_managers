@@ -43,26 +43,26 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("agile_planner.time.dt_precision", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.time.sampling_step", rclcpp::ParameterValue(0.0));
 
-  declare_parameter("nmpc_controller.quadrotor_parameters.mass", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.inertia", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
-  declare_parameter("nmpc_controller.quadrotor_parameters.motor_inertia", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.c_thrust", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.c_tau", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.drag", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
-  declare_parameter("nmpc_controller.quadrotor_parameters.n_motors", rclcpp::ParameterValue(0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.G1", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
-  declare_parameter("nmpc_controller.quadrotor_parameters.G2", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
-  declare_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.a", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.b", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.thrust_min", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.mass", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.inertia", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+  declare_parameter("multirotor_parameters.motor_inertia", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.c_thrust", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.c_tau", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.drag", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+  declare_parameter("multirotor_parameters.n_motors", rclcpp::ParameterValue(0));
+  declare_parameter("multirotor_parameters.G1", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
+  declare_parameter("multirotor_parameters.G2", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
+  declare_parameter("multirotor_parameters.quadratic_motor_model.a", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.quadratic_motor_model.b", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.thrust_min", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
+  declare_parameter("multirotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
 
-  declare_parameter("nmpc_controller.acados_parameters.nmpc_mode", rclcpp::ParameterValue(""));
-  declare_parameter("nmpc_controller.acados_parameters.N", rclcpp::ParameterValue(0));
-  declare_parameter("nmpc_controller.acados_parameters.dt", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.acados_parameters.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
-  declare_parameter("nmpc_controller.acados_parameters.R", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.nmpc_mode", rclcpp::ParameterValue(""));
+  declare_parameter("nmpc_controller.N", rclcpp::ParameterValue(0));
+  declare_parameter("nmpc_controller.dt", rclcpp::ParameterValue(0.0));
+  declare_parameter("nmpc_controller.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
+  declare_parameter("nmpc_controller.R", rclcpp::ParameterValue(0.0));
 
   odometry_           = nav_msgs::msg::Odometry();
   diagnostics_        = laser_msgs::msg::UavControlDiagnostics();
@@ -203,56 +203,56 @@ void ControlManagerNode::getParameters() {
   get_parameter("agile_planner.time.dt_precision", _pmm_params_.dt_precision);
   get_parameter("agile_planner.time.sampling_step", _pmm_params_.sampling_step);
 
-  get_parameter("nmpc_controller.quadrotor_parameters.mass", _controller_quadrotor_params_.mass);
+  get_parameter("multirotor_parameters.mass", _controller_quadrotor_params_.mass);
   _planner_quadrotor_params_.mass = _controller_quadrotor_params_.mass;
 
-  get_parameter("nmpc_controller.quadrotor_parameters.inertia", aux);
+  get_parameter("multirotor_parameters.inertia", aux);
   _controller_quadrotor_params_.inertia_matrix = _planner_quadrotor_params_.inertia_matrix =
       Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size()).asDiagonal();
   /* _controller_quadrotor_params_.inertia_x = _planner_quadrotor_params_.inertia_x = (aux.as_double_array())[0]; */
   /* _controller_quadrotor_params_.inertia_y = _planner_quadrotor_params_.inertia_y = (aux.as_double_array())[1]; */
   /* _controller_quadrotor_params_.inertia_z = _planner_quadrotor_params_.inertia_z = (aux.as_double_array())[2]; */
 
-  get_parameter("nmpc_controller.quadrotor_parameters.c_thrust", _controller_quadrotor_params_.c_thrust);
-  /* get_parameter("nmpc_controller.quadrotor_parameters.c_tau", _controller_quadrotor_params_.c_tau); */
+  get_parameter("multirotor_parameters.c_thrust", _controller_quadrotor_params_.c_thrust);
+  /* get_parameter("multirotor_parameters.c_tau", _controller_quadrotor_params_.c_tau); */
   /* _planner_quadrotor_params_.c_tau = _controller_quadrotor_params_.c_tau; */
 
-  get_parameter("nmpc_controller.quadrotor_parameters.drag", aux);
+  get_parameter("multirotor_parameters.drag", aux);
   _controller_quadrotor_params_.drag = Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size());
   /* _controller_quadrotor_params_.drag_x = (aux.as_double_array())[0]; */
   /* _controller_quadrotor_params_.drag_y = (aux.as_double_array())[1]; */
   /* _controller_quadrotor_params_.drag_z = (aux.as_double_array())[1]; */
 
-  get_parameter("nmpc_controller.quadrotor_parameters.n_motors", _controller_quadrotor_params_.n_motors);
-  get_parameter("nmpc_controller.quadrotor_parameters.G1", aux);
+  get_parameter("multirotor_parameters.n_motors", _controller_quadrotor_params_.n_motors);
+  get_parameter("multirotor_parameters.G1", aux);
   _controller_quadrotor_params_.G1 = _planner_quadrotor_params_.G1 = Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
       aux.as_double_array().data(), 4, _controller_quadrotor_params_.n_motors);
-  get_parameter("nmpc_controller.quadrotor_parameters.G2", aux);
+  get_parameter("multirotor_parameters.G2", aux);
   _controller_quadrotor_params_.G2 = Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
       aux.as_double_array().data(), 4, _controller_quadrotor_params_.n_motors);
 
-  get_parameter("nmpc_controller.quadrotor_parameters.motor_inertia", _controller_quadrotor_params_.motor_inertia);
+  get_parameter("multirotor_parameters.motor_inertia", _controller_quadrotor_params_.motor_inertia);
 
-  get_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.a", _controller_quadrotor_params_.motor_curve_a);
-  get_parameter("nmpc_controller.quadrotor_parameters.quadratic_motor_model.b", _controller_quadrotor_params_.motor_curve_b);
-  get_parameter("nmpc_controller.quadrotor_parameters.thrust_min", _controller_quadrotor_params_.thrust_min);
-  get_parameter("nmpc_controller.quadrotor_parameters.thrust_max", _controller_quadrotor_params_.thrust_max);
-  get_parameter("nmpc_controller.quadrotor_parameters.total_thrust_max", _controller_quadrotor_params_.total_thrust_max);
+  get_parameter("multirotor_parameters.quadratic_motor_model.a", _controller_quadrotor_params_.motor_curve_a);
+  get_parameter("multirotor_parameters.quadratic_motor_model.b", _controller_quadrotor_params_.motor_curve_b);
+  get_parameter("multirotor_parameters.thrust_min", _controller_quadrotor_params_.thrust_min);
+  get_parameter("multirotor_parameters.thrust_max", _controller_quadrotor_params_.thrust_max);
+  get_parameter("multirotor_parameters.total_thrust_max", _controller_quadrotor_params_.total_thrust_max);
 
-  get_parameter("nmpc_controller.acados_parameters.nmpc_mode", _acados_params_.nmpc_mode);
+  get_parameter("nmpc_controller.nmpc_mode", _acados_params_.nmpc_mode);
   if (_acados_params_.nmpc_mode == "individual_thrust") {
     angular_rates_and_thrust_mode_ = false;
   } else {
     angular_rates_and_thrust_mode_ = true;
   }
 
-  get_parameter("nmpc_controller.acados_parameters.N", _acados_params_.N);
-  get_parameter("nmpc_controller.acados_parameters.dt", _acados_params_.dt);
+  get_parameter("nmpc_controller.N", _acados_params_.N);
+  get_parameter("nmpc_controller.dt", _acados_params_.dt);
 
-  get_parameter("nmpc_controller.acados_parameters.Q", aux);
+  get_parameter("nmpc_controller.Q", aux);
   _acados_params_.Q = aux.as_double_array();
 
-  get_parameter("nmpc_controller.acados_parameters.R", _acados_params_.R);
+  get_parameter("nmpc_controller.R", _acados_params_.R);
 
   nmpc_control_input_    = Eigen::VectorXd(_controller_quadrotor_params_.n_motors);
   motor_speed_estimated_ = Eigen::VectorXd(_controller_quadrotor_params_.n_motors);

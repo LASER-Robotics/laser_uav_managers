@@ -67,6 +67,14 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(
+            'uav_parameters_file',
+            default_value=PathJoinSubstitution([FindPackageShare('laser_uav_managers'), 'params', 'laser_uavs', uav_type + '.yaml']),
+            description='Full path to the file with the all parameters.'
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
             'control_manager_file',
             default_value=PathJoinSubstitution([FindPackageShare('laser_uav_managers'),
                                                 'params', 'control_manager.yaml']),
@@ -77,6 +85,7 @@ def generate_launch_description():
 #Initialize arguments
     nmpc_controller_file = LaunchConfiguration('nmpc_controller_file')
     agile_planner_file = LaunchConfiguration('agile_planner_file')
+    uav_parameters_file = LaunchConfiguration('uav_parameters_file')
     control_manager_file = LaunchConfiguration('control_manager_file')
 
     control_manager_lifecycle_node = LifecycleNode(
@@ -85,7 +94,7 @@ def generate_launch_description():
         name='control_manager',
         namespace=uav_name,
         output='screen',
-        parameters=[control_manager_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': True}],
+        parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': True}],
         remappings=[
             ('/' + uav_name + '/odometry_in', estimation_topic),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/px4_api/motor_speed_estimated'),
