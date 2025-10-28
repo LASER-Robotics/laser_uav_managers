@@ -1,6 +1,5 @@
 /**/**:
   ros__parameters:
-
     frequency: 100.0 # Hz
     frame_id: "uav1/fcu"
 
