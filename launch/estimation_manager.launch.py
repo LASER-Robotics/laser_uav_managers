@@ -8,15 +8,36 @@ from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
 from launch_ros.substitutions import FindPackageShare
 import lifecycle_msgs.msg
+import os
 
 def generate_launch_description():
-
+    uav_name = os.environ['UAV_NAME']
+    uav_type = os.environ['UAV_TYPE']
+    
     params_file_arg = DeclareLaunchArgument(
         'params_file',
         default_value=PathJoinSubstitution([
             FindPackageShare('laser_uav_managers'),
             'params',
             'estimation_manager.yaml'
+        ]),
+        description='Path to the manager parameters file.'
+    )
+    
+    params_uav_file_arg = DeclareLaunchArgument(
+        'uav_params_file',
+        default_value=PathJoinSubstitution([
+            FindPackageShare('laser_uav_managers'),
+            'params', 'laser_uavs', uav_type + '.yaml'
+        ]),
+        description='Path to the drones parameters file.'
+    )
+    
+    params_ekf_file_arg = DeclareLaunchArgument(
+        'ekf_params_file',
+        default_value=PathJoinSubstitution([
+            FindPackageShare('laser_uav_estimators'),
+            'params', 'state_estimator.yaml'
         ]),
         description='Path to the estimator parameters file.'
     )
@@ -35,6 +56,8 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('params_file'),
+            LaunchConfiguration('uav_params_file'),
+            LaunchConfiguration('ekf_params_file'),
             {'use_sim_time': LaunchConfiguration('use_sim_time')}
         ],
         remappings=[
@@ -78,6 +101,8 @@ def generate_launch_description():
     
     return LaunchDescription([
         params_file_arg,
+        params_uav_file_arg,
+        params_ekf_file_arg,
         use_sim_time_arg,
         estimation_manager_node,
         configure_event_handler,

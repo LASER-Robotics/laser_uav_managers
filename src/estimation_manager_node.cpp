@@ -17,12 +17,9 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions &options) : rclcp
   declare_parameter("sensor_timeout", 0.5);
   declare_parameter("ekf_verbosity", "INFO");
 
-  declare_parameter("drone_params.mass", 1.0);
-  declare_parameter("drone_params.arm_length", 0.25);
-  declare_parameter("drone_params.thrust_coefficient", 1.0);
-  declare_parameter("drone_params.torque_coefficient", 0.05);
-  declare_parameter("drone_params.inertia", std::vector<double>{0.01, 0.01, 0.01});
-  declare_parameter("drone_params.G1", std::vector<double>{0.1, -0.1, -0.1, 0.1, 0.1, 0.1, -0.1, -0.1});
+  declare_parameter("multirotor_parameters.mass", 1.0);
+  declare_parameter("multirotor_parameters.inertia", std::vector<double>{0.01, 0.01, 0.01});
+  declare_parameter("multirotor_parameters.G1", std::vector<double>{0.1, -0.1, -0.1, 0.1, 0.1, 0.1, -0.1, -0.1});
 
   declare_parameter("process_noise_gains.position", 0.01);
   declare_parameter("process_noise_gains.orientation", 0.01);
@@ -151,14 +148,11 @@ void EstimationManager::getParameters() {
   get_parameter("odometry_switch_velocity_angular_threshold", odometry_switch_velocity_angular_threshold_);
   get_parameter("sensor_timeout", sensor_timeout_);
   get_parameter("ekf_verbosity", ekf_verbosity_);
-  get_parameter("drone_params.mass", mass_);
-  get_parameter("drone_params.arm_length", arm_length_);
-  get_parameter("drone_params.thrust_coefficient", thrust_coefficient_);
-  get_parameter("drone_params.torque_coefficient", torque_coefficient_);
-  get_parameter("drone_params.inertia", inertia_vec_);
+  get_parameter("multirotor_parameters.mass", mass_);
+  get_parameter("multirotor_parameters.inertia", inertia_vec_);
 
   std::vector<double> G1_vec;
-  get_parameter("drone_params.G1", G1_vec);
+  get_parameter("multirotor_parameters.G1", G1_vec);
   int num_cols       = G1_vec.size() / 4;
   allocation_matrix_ = Eigen::Map<const Eigen::MatrixXd>(G1_vec.data(), 4, num_cols);
 
@@ -264,6 +258,7 @@ void EstimationManager::setupEKF() {
   Eigen::Matrix3d inertia = Eigen::Vector3d(inertia_vec_[0], inertia_vec_[1], inertia_vec_[2]).asDiagonal();
 
   ekf_ = std::make_unique<laser_uav_estimators::StateEstimator>(mass_, allocation_matrix_, inertia, ekf_verbosity_);
+
 
   RCLCPP_INFO(get_logger(), "Applying noise gains to EKF.");
   ekf_->set_process_noise_gains(process_noise_gains_);
@@ -440,14 +435,14 @@ std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time
   std::lock_guard<std::mutex> lock(sensor_data.mtx);
 
   if (sensor_data.buffer.empty()) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Message buffer empty.", sensor_name.c_str());
+    RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Message buffer empty.", sensor_name.c_str());
     return std::nullopt;
   }
 
   auto newest_msg_it = sensor_data.buffer.rbegin();
   if ((ref_time - newest_msg_it->first) > sensor_data.timeout) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Timeout detected. Last msg is %.2f s old. Timeout is %.2f s.", sensor_name.c_str(),
-                         (ref_time - newest_msg_it->first).seconds(), sensor_data.timeout.seconds());
+    RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Timeout detected. Last msg is %.2f s old. Timeout is %.2f s.", sensor_name.c_str(),
+                          (ref_time - newest_msg_it->first).seconds(), sensor_data.timeout.seconds());
     return std::nullopt;
   }
 
@@ -472,8 +467,8 @@ std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time
     return msg_copy;
   }
 
-  RCLCPP_WARN_THROTTLE(get_logger(), *this->get_clock(), 1000, "[%s]: REJECTED: Best match (%.2f ms) is outside tolerance (%.2f ms).", sensor_name.c_str(),
-                       min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
+  RCLCPP_DEBUG_THROTTLE(get_logger(), *this->get_clock(), 1000, "[%s]: REJECTED: Best match (%.2f ms) is outside tolerance (%.2f ms).", sensor_name.c_str(),
+                        min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
 
   return std::nullopt;
 }

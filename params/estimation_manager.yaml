@@ -1,7 +1,6 @@
 /**/**:
   ros__parameters:
     frequency: 100.0 # Hz
-    frame_id: "uav1/fcu"
 
     odometry_switch_distance_threshold: 0.5 # meters
     odometry_switch_angle_threshold: 0.1 # radians
@@ -11,49 +10,7 @@
     initial_odometry_source: "fast_lio_odom"
     odometry_source_names: ["px4_api_odom", "openvins_odom", "fast_lio_odom"]
     
-    ekf_verbosity: "SILENT" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
-
-    drone_params:
-      mass: 1.60 # kg
-      arm_length: 0.258 # meters
-      inertia: [0.021667, 0.021667, 0.0425] # kg*m^2
-      G1: [ 1.0,    1.0,   1.0,    1.0,
-          -0.18,   0.18,  0.18,  -0.18,
-          -0.185, 0.185, -0.185, 0.185,
-          -0.016,  -0.016,  0.016,   0.016 ]
-
-    process_noise_gains:
-      position: 0.1
-      orientation: 0.01
-      linear_velocity: 0.1
-      angular_velocity: 0.1
-
-    measurement_noise_gains:
-      px4_odometry:
-        position: 0.001
-        orientation: 0.001
-        linear_velocity: 0.01
-        angular_velocity: 0.01
-      openvins:
-        position: 0.001
-        orientation: 0.001
-        linear_velocity: 0.01
-        angular_velocity: 0.1
-      fast_lio:
-        position: 0.01
-        orientation: 0.01
-        linear_velocity: 0.3
-        angular_velocity: 0.3
-      imu:
-        position: 0.1
-        orientation: 0.1
-        linear_velocity: 0.1
-        angular_velocity: 0.01
-      gps:
-        position: 0.1
-        orientation: 0.1
-        linear_velocity: 0.1
-        angular_velocity: 0.1
+    ekf_verbosity: "WARNING" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
 
     px4_odom_tolerance: 0.015 # seconds
     px4_odom_timeout: 0.5 # seconds
