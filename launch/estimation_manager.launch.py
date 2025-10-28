@@ -1,17 +1,3 @@
-"""
-Launch file for the EstimationManager node with lifecycle automation and topic remapping.
-@author Wagner Dantas Garcia | Laser UAV Team <wagnergarcia@eng.ci.ufpb.br>
-@date September 1, 2025
-
-This launch file is responsible for:
-1. Declaring configurable launch arguments, including use_sim_time.
-2. Launching the 'estimation_manager' as a lifecycle node (LifecycleNode).
-3. Passing the parameter configuration file to the node.
-4. Remapping the node's input and output topics.
-5. Automating the lifecycle transitions (configure, activate) so that the node
-   is ready for use immediately after launch.
-"""
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler, EmitEvent
 from launch.event_handlers import OnProcessStart
@@ -24,11 +10,7 @@ from launch_ros.substitutions import FindPackageShare
 import lifecycle_msgs.msg
 
 def generate_launch_description():
-    """Generates the complete launch configuration."""
 
-    # --- 1. ARGUMENT DECLARATION ---
-
-    # Argument for the parameters file
     params_file_arg = DeclareLaunchArgument(
         'params_file',
         default_value=PathJoinSubstitution([
@@ -39,17 +21,12 @@ def generate_launch_description():
         description='Path to the estimator parameters file.'
     )
 
-    # Argument to control simulation time
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time',
         default_value='True',
         description='Defines if simulation time (from the /clock topic) should be used.'
     )
 
-
-    # --- 2. NODE DEFINITION ---
-
-    # Definition of the lifecycle node
     estimation_manager_node = LifecycleNode(
         package='laser_uav_managers',
         executable='estimation_manager_main',
@@ -58,13 +35,12 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('params_file'),
-            # Uses the value from the 'use_sim_time' argument
             {'use_sim_time': LaunchConfiguration('use_sim_time')}
         ],
         remappings=[
             ('odometry_in', 'px4_api/odometry'),
             ('odometry_fast_lio_in', 'fast_lio/odometry'),
-            ('odometry_openvins_in', 'vins_republisher/odom'),
+            ('odometry_openvins_in', 'vins_republisher/odometry'),
             ('imu_in', 'px4_api/imu'),
             ('control_in', 'control_manager/diagnostics'),
             ('odometry_out', 'estimation_manager/estimation'),
@@ -74,10 +50,6 @@ def generate_launch_description():
         ]
     )
 
-
-    # --- 3. LIFECYCLE EVENT HANDLERS (no changes) ---
-
-    # Event handler to trigger the 'configure' transition upon node startup
     configure_event_handler = RegisterEventHandler(
         OnProcessStart(
             target_action=estimation_manager_node,
@@ -90,7 +62,6 @@ def generate_launch_description():
         )
     )
 
-    # Event handler to trigger the 'activate' transition after successful configuration
     activate_event_handler = RegisterEventHandler(
         OnStateTransition(
             target_lifecycle_node=estimation_manager_node,
@@ -104,15 +75,10 @@ def generate_launch_description():
             ],
         )
     )
-
-    # --- 4. RETURN THE LAUNCH DESCRIPTION ---
     
     return LaunchDescription([
-        # Add the new arguments to the description
         params_file_arg,
         use_sim_time_arg,
-
-        # Remaining actions
         estimation_manager_node,
         configure_event_handler,
         activate_event_handler,
