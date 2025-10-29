@@ -4,8 +4,8 @@
 
     odometry_switch_distance_threshold: 0.5 # meters
     odometry_switch_angle_threshold: 0.1 # radians
-    odometry_switch_velocity_linear_threshold: 0.1 # m/s
-    odometry_switch_velocity_angular_threshold: 0.1 # rad/s
+    odometry_switch_velocity_linear_threshold: 0.2 # m/s
+    odometry_switch_velocity_angular_threshold: 0.2 # rad/s
 
     initial_odometry_source: "px4_api_odom"
     odometry_source_names: ["px4_api_odom", "openvins_odom", "fast_lio_odom"]

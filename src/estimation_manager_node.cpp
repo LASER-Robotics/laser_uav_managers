@@ -299,6 +299,8 @@ void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::Share
 void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(openvins_odom_data_.mtx);
   openvins_odom_data_.buffer[msg->header.stamp] = msg;
+  if (enable_openvins_odom_)
+    odom_pub_->publish(*msg);
 }
 //}
 
@@ -623,7 +625,7 @@ void EstimationManager::timerCallback() {
     if (has_measurement || has_measurement_imu)
       ekf_->correct(pkg);
 
-    if (has_prediction || has_measurement)
+    if ((has_prediction || has_measurement) && !enable_openvins_odom_)
       publishOdometry(odom_pub_);
   }
   catch (const std::exception &e) {
