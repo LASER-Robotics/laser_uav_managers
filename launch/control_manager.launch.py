@@ -68,7 +68,13 @@ def generate_launch_description():
         )
     )
 
-#Initialize arguments
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value=PythonExpression(['"', os.getenv('REAL_UAV', "true"), '" == "false"']),
+            description='Whether use the simulation time.'))
+
+    #Initialize arguments
     nmpc_controller_file = LaunchConfiguration('nmpc_controller_file')
     agile_planner_file = LaunchConfiguration('agile_planner_file')
     uav_parameters_file = LaunchConfiguration('uav_parameters_file')
@@ -80,7 +86,7 @@ def generate_launch_description():
         name='control_manager',
         namespace=uav_name,
         output='screen',
-        parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': True}],
+        parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[
             ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/px4_api/motor_speed_estimated'),

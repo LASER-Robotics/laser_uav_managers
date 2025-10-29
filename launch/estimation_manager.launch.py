@@ -44,7 +44,7 @@ def generate_launch_description():
 
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='True',
+        default_value=PythonExpression(['"', os.getenv('REAL_UAV', "true"), '" == "false"']),
         description='Defines if simulation time (from the /clock topic) should be used.'
     )
 
