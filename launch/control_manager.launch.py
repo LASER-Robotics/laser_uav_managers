@@ -7,7 +7,7 @@ from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import RegisterEventHandler, EmitEvent
 
 from launch_ros.actions import LifecycleNode
-from launch_ros.substitutions import FindPackageShare
+from launch_ros.substitutions import FindPackageShare, PythonExpression
 
 from launch.events import matches_action
 from launch.event_handlers.on_process_start import OnProcessStart
