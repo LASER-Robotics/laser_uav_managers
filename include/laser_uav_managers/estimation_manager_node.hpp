@@ -84,22 +84,26 @@ private:
   void checkSubscribersCallback();
 
   void diagnosticsTimerCallback();
+
+  void set_verbosity(const std::string &verbosity);
   /*//}*/
 
   void setOdometryCallback(const std::shared_ptr<laser_msgs::srv::SetString::Request> request, std::shared_ptr<laser_msgs::srv::SetString::Response> response);
 
+
   rclcpp::Service<laser_msgs::srv::SetString>::SharedPtr set_odometry_service_;
+
 
   /* FUNCTIONS //{ */
   void setupEKF();
 
-  void publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub);
+  void publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time);
 
   template <typename MsgT>
   std::optional<MsgT> getSynchronizedMessage(const rclcpp::Time &ref_time, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name);
 
   template <typename MsgT>
-  void pruneSensorBuffer(const rclcpp::Time &now, SensorDataBuffer<MsgT> &sensor_data);
+  void pruneSensorBuffer(const rclcpp::Time &now, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name);
   /*//}*/
 
   /* EKF //{ */
@@ -141,7 +145,7 @@ private:
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_openvins_msg_;
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_fast_lio_msg_;
   sensor_msgs::msg::Imu::SharedPtr                  last_imu_msg_;
-  laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_input_;
+  laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_msg_;
 
   bool is_active_{false};
   bool is_control_input_{false};
