@@ -21,7 +21,6 @@ import os
 def generate_launch_description():
     uav_name = os.environ['UAV_NAME']
     uav_type = os.environ['UAV_TYPE']
-    estimation_source = os.environ['UAV_ESTIMATION_SOURCE']
     
     defaults_uavs = ["x500", "lr7pro"]
 
@@ -33,20 +32,7 @@ def generate_launch_description():
         print("The uav type dont set up in yours enviroment variables")
         return
 
-    estimation_topic = ""
-    if estimation_source == "GNSS":
-        estimation_topic = '/' + uav_name + '/px4_api/odometry'
-    elif estimation_source == "VIO":
-        estimation_topic = '/' + uav_name + '/vins_republisher/odometry'
-    elif estimation_source == "LIO":
-        estimation_topic = '/' + uav_name + '/fast_lio/odometry'
-    elif estimation_source == "EstimationManager":
-        estimation_topic = '/' + uav_name + '/estimation_manager/estimation'
-    else:
-        print("The uav estimation source dont exist")
-        return
-
-#Declare arguments
+    #Declare arguments
     declared_arguments = []
 
     declared_arguments.append(
@@ -96,7 +82,7 @@ def generate_launch_description():
         output='screen',
         parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': True}],
         remappings=[
-            ('/' + uav_name + '/odometry_in', estimation_topic),
+            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/px4_api/motor_speed_estimated'),
             ('/' + uav_name + '/imu_in', '/' + uav_name + '/px4_api/imu'),
             ('/' + uav_name + '/motor_speed_reference_out', '/' + uav_name + '/control_manager/motor_speed_reference'),
