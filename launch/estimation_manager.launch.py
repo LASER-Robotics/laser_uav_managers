@@ -6,7 +6,8 @@ from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJ
 from launch_ros.actions import LifecycleNode
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
-from launch_ros.substitutions import FindPackageShare, PythonExpression
+from launch_ros.substitutions import FindPackageShare
+from launch.substitutions import PythonExpression
 import lifecycle_msgs.msg
 import os
 
