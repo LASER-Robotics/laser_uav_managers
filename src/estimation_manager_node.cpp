@@ -315,8 +315,8 @@ void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::Share
   px4_odom_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG(
       get_logger(), "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-      ((last_odometry_px4_msg_ != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(last_odometry_px4_msg_->header.stamp)).seconds()) : 0.0));
-  last_odometry_px4_msg_ = msg;
+      ((px4_odom_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(px4_odom_data_.last_msg->header.stamp)).seconds()) : 0.0));
+  px4_odom_data_.last_msg = msg;
 }
 //}
 
@@ -326,11 +326,11 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
   openvins_odom_data_.buffer[msg->header.stamp] = msg;
   if (enable_openvins_odom_)
     odom_pub_->publish(*msg);
-  RCLCPP_DEBUG(
-      get_logger(), "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-      ((last_odometry_openvins_msg_ != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(last_odometry_openvins_msg_->header.stamp)).seconds())
-                                                : 0.0));
-  last_odometry_openvins_msg_ = msg;
+  RCLCPP_DEBUG(get_logger(), "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+               ((openvins_odom_data_.last_msg != nullptr)
+                    ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(openvins_odom_data_.last_msg->header.stamp)).seconds())
+                    : 0.0));
+  openvins_odom_data_.last_msg = msg;
 }
 //}
 
@@ -338,11 +338,11 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
 void EstimationManager::odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(fast_lio_odom_data_.mtx);
   fast_lio_odom_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(
-      get_logger(), "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-      ((last_odometry_fast_lio_msg_ != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(last_odometry_fast_lio_msg_->header.stamp)).seconds())
-                                                : 0.0));
-  last_odometry_fast_lio_msg_ = msg;
+  RCLCPP_DEBUG(get_logger(), "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+               ((fast_lio_odom_data_.last_msg != nullptr)
+                    ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
+                    : 0.0));
+  fast_lio_odom_data_.last_msg = msg;
 }
 //}
 
@@ -351,8 +351,8 @@ void EstimationManager::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) 
   std::lock_guard<std::mutex> lock(imu_data_.mtx);
   imu_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG(get_logger(), "Received IMU message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-               ((last_imu_msg_ != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds()) : 0.0));
-  last_imu_msg_ = msg;
+               ((imu_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(imu_data_.last_msg->header.stamp)).seconds()) : 0.0));
+  imu_data_.last_msg = msg;
 }
 //}
 
@@ -360,9 +360,10 @@ void EstimationManager::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) 
 void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(control_data_.mtx);
   control_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(get_logger(), "Received control message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-               ((last_control_msg_ != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(last_control_msg_->header.stamp)).seconds()) : 0.0));
-  last_control_msg_ = msg;
+  RCLCPP_DEBUG(
+      get_logger(), "Received control message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+      ((control_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp)).seconds()) : 0.0));
+  control_data_.last_msg = msg;
 }
 //}
 
@@ -482,9 +483,9 @@ std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time
   }
 
   auto newest_msg_it = sensor_data.buffer.rbegin();
-  if ((ref_time - newest_msg_it->first) > sensor_data.timeout) {
+  if ((ref_time - rclcpp::Time(sensor_data.last_msg->header.stamp)) > sensor_data.timeout) {
     RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Timeout detected. Last msg is %.2f s old. Timeout is %.2f s.", sensor_name.c_str(),
-                          (ref_time - newest_msg_it->first).seconds(), sensor_data.timeout.seconds());
+                          (ref_time - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds(), sensor_data.timeout.seconds());
     return std::nullopt;
   }
 
@@ -681,6 +682,14 @@ void EstimationManager::timerCallback() {
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
       publishOdometry(odom_pub_, last_update_time_);
+    } else if (enable_openvins_odom_ && !openvins_odom_data_.last_msg) {
+      auto msg          = std::make_shared<nav_msgs::msg::Odometry>();
+      msg->header.stamp = this->get_clock()->now();
+
+      if (px4_odom_data_.last_msg) {
+        msg = px4_odom_data_.last_msg;
+      }
+      odom_pub_->publish(*msg);
     }
   }
   catch (const std::exception &e) {
@@ -715,14 +724,30 @@ void EstimationManager::diagnosticsTimerCallback() {
       status.is_active   = sensor_data.is_active;
       status.buffer_size = sensor_data.buffer.size();
 
-      if (!sensor_data.buffer.empty()) {
-        auto last_msg_it               = sensor_data.buffer.rbegin();
-        status.last_message_stamp      = last_msg_it->first;
-        status.time_since_last_message = (this->get_clock()->now() - last_msg_it->first).seconds();
-        status.has_timeout             = (this->get_clock()->now() - last_msg_it->first) > sensor_data.timeout;
+      if (sensor_data.last_msg) {
+        status.time_since_last_message = (this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds();
+        status.has_timeout             = (this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)) > sensor_data.timeout;
+        status.last_message_stamp      = sensor_data.last_msg->header.stamp;
       } else {
         status.has_timeout             = true;
         status.time_since_last_message = -1.0;
+      }
+
+      if (name == current_active_odometry_name_) {
+
+        if (!sensor_data.last_msg) {
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Active odometry sensor ('%s') has not started yet (no message received).",
+                               name.c_str());
+        } else {
+
+          if ((this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)) > sensor_data.timeout) {
+            RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                                  "Timeout! Active odometry sensor ('%s') stopped publishing. (Last msg: %.2f s ago)", name.c_str(),
+                                  (this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds());
+          } else {
+            RCLCPP_DEBUG(this->get_logger(), "Sensor '%s' OK.", name.c_str());
+          }
+        }
       }
     };
 

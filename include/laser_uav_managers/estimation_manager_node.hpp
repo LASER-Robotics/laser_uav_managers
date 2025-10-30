@@ -39,6 +39,7 @@ struct SensorDataBuffer
   rclcpp::Duration                                 tolerance;
   rclcpp::Duration                                 timeout;
   bool                                             is_active{false};
+  typename MsgT::SharedPtr                         last_msg{nullptr};
 };
 
 class EstimationManager : public rclcpp_lifecycle::LifecycleNode {

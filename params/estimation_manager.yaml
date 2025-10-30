@@ -20,7 +20,7 @@
     openvins_odom_timeout: 1.0 # seconds
     openvins_odom_covariance: 0.5
 
-    fast_lio_odom_tolerance: 0.025 # seconds
+    fast_lio_odom_tolerance: 0.15 # seconds
     fast_lio_odom_timeout: 1.0 # seconds
     fast_lio_odom_covariance: 0.5
 
