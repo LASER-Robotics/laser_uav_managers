@@ -745,7 +745,8 @@ void EstimationManager::diagnosticsTimerCallback() {
                                   "Timeout! Active odometry sensor ('%s') stopped publishing. (Last msg: %.2f s ago)", name.c_str(),
                                   (this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds());
           } else {
-            RCLCPP_DEBUG(this->get_logger(), "Sensor '%s' OK.", name.c_str());
+            RCLCPP_INFO_ONCE(this->get_logger(), "Active odometry sensor ('%s') publishing. (Last msg: %.2f s ago)", name.c_str(),
+                             (this->get_clock()->now() - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds());
           }
         }
       }
