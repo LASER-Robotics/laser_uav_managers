@@ -649,6 +649,10 @@ void EstimationManager::timerCallback() {
         px4_odom_msg->pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
         px4_odom_msg->pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
 
+        px4_odom_msg->pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
 
         if (px4_odom_covariance_ > px4_pose_cov.trace() && px4_odom_covariance_ > px4_twist_cov.trace()) {
           pkg.px4_odometry = *px4_odom_msg;
@@ -670,7 +674,13 @@ void EstimationManager::timerCallback() {
     bool has_measurement_imu{false};
     if (imu_msg) {
       if (last_imu_msg_) {
-        pkg.dt              = (rclcpp::Time(imu_msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds();
+        pkg.dt = (rclcpp::Time(imu_msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds();
+
+        imu_msg->orientation.x = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.y = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.z = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.w = std::numeric_limits<double>::quiet_NaN();
+
         pkg.imu             = *imu_msg;
         has_measurement_imu = true;
       }
