@@ -649,6 +649,10 @@ void EstimationManager::timerCallback() {
         px4_odom_msg->pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
         px4_odom_msg->pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
 
+        px4_odom_msg->pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
+        px4_odom_msg->pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
 
         if (px4_odom_covariance_ > px4_pose_cov.trace() && px4_odom_covariance_ > px4_twist_cov.trace()) {
           pkg.px4_odometry = *px4_odom_msg;
