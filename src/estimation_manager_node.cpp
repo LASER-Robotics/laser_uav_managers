@@ -674,7 +674,13 @@ void EstimationManager::timerCallback() {
     bool has_measurement_imu{false};
     if (imu_msg) {
       if (last_imu_msg_) {
-        pkg.dt              = (rclcpp::Time(imu_msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds();
+        pkg.dt = (rclcpp::Time(imu_msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds();
+
+        imu_msg->orientation.x = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.y = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.z = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->orientation.w = std::numeric_limits<double>::quiet_NaN();
+
         pkg.imu             = *imu_msg;
         has_measurement_imu = true;
       }
