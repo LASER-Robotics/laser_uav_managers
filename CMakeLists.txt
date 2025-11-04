@@ -150,6 +150,8 @@ install(DIRECTORY include/
 install(DIRECTORY
   launch
   params
+  plotjuggler
+  scripts
   DESTINATION share/${PROJECT_NAME}
 )
 
