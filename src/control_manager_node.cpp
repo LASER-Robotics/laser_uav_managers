@@ -21,9 +21,10 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("filter_params.butterworth.motor_a", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter("filter_params.butterworth.motor_b", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
 
-  declare_parameter("agile_planner.quadrotor_parameters.max_acc", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.quadrotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.quadrotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
+  declare_parameter("agile_planner.multirotor_parameters.max_accel", rclcpp::ParameterValue(0.0));
+  declare_parameter("agile_planner.multirotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
+  declare_parameter("agile_planner.multirotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
+  declare_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", rclcpp::ParameterValue(1.0));
 
   declare_parameter("agile_planner.ltd_opt.use_drag", rclcpp::ParameterValue(false));
   declare_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", rclcpp::ParameterValue(0.0));
@@ -181,9 +182,10 @@ void ControlManagerNode::getParameters() {
   get_parameter("filter_params.butterworth.motor_b", aux);
   _motor_b_ = aux.as_double_array();
 
-  get_parameter("agile_planner.quadrotor_parameters.max_acc", _pmm_params_.max_acc_norm);
-  get_parameter("agile_planner.quadrotor_parameters.max_vel", _pmm_params_.max_vel_norm);
-  get_parameter("agile_planner.quadrotor_parameters.default_vel", _pmm_params_.default_vel_norm);
+  get_parameter("agile_planner.multirotor_parameters.max_accel", _pmm_params_.max_accel_norm);
+  get_parameter("agile_planner.multirotor_parameters.max_vel", _pmm_params_.max_vel_norm);
+  get_parameter("agile_planner.multirotor_parameters.default_vel", _pmm_params_.default_vel_norm);
+  get_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", _pmm_params_.absolute_maximum_angular_accel);
 
   get_parameter("agile_planner.ltd_opt.use_drag", _pmm_params_.use_drag);
   get_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", _pmm_params_.thrust_decomp_acc_precision);
@@ -209,19 +211,11 @@ void ControlManagerNode::getParameters() {
   get_parameter("multirotor_parameters.inertia", aux);
   _controller_quadrotor_params_.inertia_matrix = _planner_quadrotor_params_.inertia_matrix =
       Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size()).asDiagonal();
-  /* _controller_quadrotor_params_.inertia_x = _planner_quadrotor_params_.inertia_x = (aux.as_double_array())[0]; */
-  /* _controller_quadrotor_params_.inertia_y = _planner_quadrotor_params_.inertia_y = (aux.as_double_array())[1]; */
-  /* _controller_quadrotor_params_.inertia_z = _planner_quadrotor_params_.inertia_z = (aux.as_double_array())[2]; */
 
   get_parameter("multirotor_parameters.c_thrust", _controller_quadrotor_params_.c_thrust);
-  /* get_parameter("multirotor_parameters.c_tau", _controller_quadrotor_params_.c_tau); */
-  /* _planner_quadrotor_params_.c_tau = _controller_quadrotor_params_.c_tau; */
 
   get_parameter("multirotor_parameters.drag", aux);
   _controller_quadrotor_params_.drag = Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size());
-  /* _controller_quadrotor_params_.drag_x = (aux.as_double_array())[0]; */
-  /* _controller_quadrotor_params_.drag_y = (aux.as_double_array())[1]; */
-  /* _controller_quadrotor_params_.drag_z = (aux.as_double_array())[1]; */
 
   get_parameter("multirotor_parameters.n_motors", _controller_quadrotor_params_.n_motors);
   get_parameter("multirotor_parameters.G1", aux);
