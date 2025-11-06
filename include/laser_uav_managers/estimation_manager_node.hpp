@@ -149,6 +149,7 @@ private:
   laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_msg_;
 
   bool is_active_{false};
+  bool is_ekf_active_{false};
   bool is_control_input_{false};
   bool is_initialized_{false};
   bool is_first_control_msg{false};

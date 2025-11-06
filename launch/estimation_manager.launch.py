@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler, EmitEvent
+from launch.actions import OpaqueFunction # Necessário
 from launch.event_handlers import OnProcessStart
 from launch.events import matches_action
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
@@ -10,6 +11,49 @@ from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PythonExpression
 import lifecycle_msgs.msg
 import os
+import yaml # Necessário
+from ament_index_python.packages import get_package_share_directory # Necessário
+
+# Esta função só é chamada no "Momento 2" (Execução)
+def load_ekf_path(context, *args, **kwargs):
+    manager_params_file_path = LaunchConfiguration('params_file').perform(context)
+    
+    estimator_config_file = 'state_estimator.yaml'
+    
+    try:
+        with open(manager_params_file_path, 'r') as f:
+            config_data = yaml.safe_load(f)
+        
+        estimator_name = config_data['/**/**']['ros__parameters']['initial_odometry_source']
+        
+        if(estimator_name == 'fast_lio_odom'):
+            estimator_config_file = 'fast_lio_state_estimator.yaml'
+        elif(estimator_name == 'openvins_odom'):
+            estimator_config_file = 'openvins_state_estimator.yaml'
+        elif(estimator_name == 'px4_api_odom'):
+            estimator_config_file = 'px4_api_state_estimator.yaml'
+        else:
+            estimator_config_file = 'state_estimator.yaml'
+
+        print(f"Info: Usando o arquivo de parâmetros do estimador: {estimator_config_file}")
+            
+    except (IOError, KeyError, TypeError) as e:
+        print(f"Alerta: Não foi possível ler 'initial_odometry_source' de {manager_params_file_path}. Usando 'state_estimator.yaml' como padrão. Erro: {e}")
+        estimator_config_file = 'state_estimator.yaml'
+
+    try:
+        estimators_pkg_share = get_package_share_directory('laser_uav_estimators')
+    except Exception as e:
+        print(f"Erro fatal: Pacote 'laser_uav_estimators' não encontrado. {e}")
+        return []
+
+    ekf_params_path = os.path.join(
+        estimators_pkg_share, 'params', estimator_config_file
+    )
+    
+    context.launch_configurations['ekf_params_file'] = ekf_params_path
+    
+    return []
 
 def generate_launch_description():
     uav_name = os.environ['UAV_NAME']
@@ -34,20 +78,13 @@ def generate_launch_description():
         description='Path to the drones parameters file.'
     )
     
-    params_ekf_file_arg = DeclareLaunchArgument(
-        'ekf_params_file',
-        default_value=PathJoinSubstitution([
-            FindPackageShare('laser_uav_estimators'),
-            'params', 'state_estimator.yaml'
-        ]),
-        description='Path to the estimator parameters file.'
-    )
-
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time',
         default_value=PythonExpression(['"', os.getenv('REAL_UAV', "true"), '" == "false"']),
         description='Defines if simulation time (from the /clock topic) should be used.'
     )
+
+    set_ekf_path_action = OpaqueFunction(function=load_ekf_path)
 
     estimation_manager_node = LifecycleNode(
         package='laser_uav_managers',
@@ -103,8 +140,10 @@ def generate_launch_description():
     return LaunchDescription([
         params_file_arg,
         params_uav_file_arg,
-        params_ekf_file_arg,
         use_sim_time_arg,
+        
+        set_ekf_path_action, 
+        
         estimation_manager_node,
         configure_event_handler,
         activate_event_handler,

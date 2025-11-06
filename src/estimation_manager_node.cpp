@@ -571,6 +571,49 @@ void EstimationManager::timerCallback() {
     bool         has_prediction{false};
     const double MAX_CONTROL_VALUE = 1.0e2;
 
+    if (!enable_px4_odom_ && !px4_odom_data_.is_active && !imu_data_.is_active) {
+      if (!px4_odom_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
+      if (!imu_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
+      if (!is_ekf_active_) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        return;
+      }
+    } else {
+      RCLCPP_INFO_ONCE(get_logger(), "PX4 odometry input is active, IMU input is active, or PX4 odometry is enabled.");
+    }
+
+    if (!enable_fast_lio_odom_ && !px4_odom_data_.is_active && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
+      if (!fast_lio_odom_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Fast-LIO odometry input is inactive.");
+      if (!px4_odom_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
+      if (!imu_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
+      if (!is_ekf_active_) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        return;
+      }
+    } else {
+      RCLCPP_INFO_ONCE(get_logger(), "Fast-LIO odometry input is active, PX4 odometry input is active, IMU input is active, or Fast-LIO odometry is enabled.");
+    }
+
+    if (!enable_openvins_odom_ && !openvins_odom_data_.is_active && !imu_data_.is_active) {
+      if (!openvins_odom_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "OpenVINS odometry input is inactive.");
+      if (!imu_data_.is_active)
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
+      if (!is_ekf_active_) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        return;
+      }
+    } else {
+      RCLCPP_INFO_ONCE(get_logger(), "OpenVINS odometry input is active, IMU input is active, or OpenVINS odometry is enabled.");
+    }
+
+    RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
+
     if (control_msg) {
       if (!is_first_control_msg) {
         last_control_input_time_ = rclcpp::Time(control_msg->header.stamp);
@@ -641,31 +684,36 @@ void EstimationManager::timerCallback() {
       // } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
     } else if ((px4_odom_msg || fast_lio_odom_msg) && enable_fast_lio_odom_) {
       if (px4_odom_msg) {
-        const auto                                   &px4_odom = *px4_odom_msg;
+        auto                                         &px4_odom = *px4_odom_msg;
         Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_pose_cov(px4_odom.pose.covariance.data());
         Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_twist_cov(px4_odom.twist.covariance.data());
 
-        px4_odom_msg->pose.pose.position.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom_msg->pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom_msg->pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.position.x = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
 
-        px4_odom_msg->pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
-        px4_odom_msg->pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom_msg->pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom_msg->pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
+        px4_odom.pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
 
         if (px4_odom_covariance_ > px4_pose_cov.trace() && px4_odom_covariance_ > px4_twist_cov.trace()) {
-          pkg.px4_odometry = *px4_odom_msg;
+          pkg.px4_odometry = px4_odom;
           has_measurement  = true;
         }
       }
       if (fast_lio_odom_msg) {
-        const auto                                   &fast_lio_odom = *fast_lio_odom_msg;
+        auto &fast_lio_odom = *fast_lio_odom_msg;
+
+        fast_lio_odom.twist.twist.angular.x = std::numeric_limits<double>::quiet_NaN();
+        fast_lio_odom.twist.twist.angular.y = std::numeric_limits<double>::quiet_NaN();
+        fast_lio_odom.twist.twist.angular.z = std::numeric_limits<double>::quiet_NaN();
+
         Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_pose_cov(fast_lio_odom.pose.covariance.data());
         Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_twist_cov(fast_lio_odom.twist.covariance.data());
         if (fast_lio_odom_covariance_ > fast_lio_pose_cov.trace() && fast_lio_odom_covariance_ > fast_lio_twist_cov.trace()) {
-          pkg.fast_lio      = *fast_lio_odom_msg;
-          last_update_time_ = fast_lio_odom_msg->header.stamp;
+          pkg.fast_lio      = fast_lio_odom;
+          last_update_time_ = fast_lio_odom.header.stamp;
           has_measurement   = true;
         }
       }
@@ -681,7 +729,11 @@ void EstimationManager::timerCallback() {
         imu_msg->orientation.z = std::numeric_limits<double>::quiet_NaN();
         imu_msg->orientation.w = std::numeric_limits<double>::quiet_NaN();
 
-        pkg.imu             = *imu_msg;
+        imu_msg->linear_acceleration.x = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->linear_acceleration.y = std::numeric_limits<double>::quiet_NaN();
+        imu_msg->linear_acceleration.z = std::numeric_limits<double>::quiet_NaN();
+
+        pkg.imu             = imu_msg;
         has_measurement_imu = true;
       }
       last_imu_msg_ = std::make_shared<sensor_msgs::msg::Imu>(*imu_msg);
@@ -692,6 +744,7 @@ void EstimationManager::timerCallback() {
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
       publishOdometry(odom_pub_, last_update_time_);
+      is_ekf_active_ = true;
     } else if (enable_openvins_odom_ && !openvins_odom_data_.last_msg) {
       auto msg          = std::make_shared<nav_msgs::msg::Odometry>();
       msg->header.stamp = this->get_clock()->now();
