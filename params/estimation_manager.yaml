@@ -10,7 +10,7 @@
     initial_odometry_source: "fast_lio_odom"
     odometry_source_names: ["px4_api_odom", "openvins_odom", "fast_lio_odom"]
     
-    ekf_verbosity: "WARNING" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
+    ekf_verbosity: "INFO" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
 
     px4_odom_tolerance: 0.015 # seconds
     px4_odom_timeout: 0.5 # seconds
