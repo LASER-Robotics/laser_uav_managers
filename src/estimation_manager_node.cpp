@@ -476,7 +476,6 @@ void EstimationManager::setOdometryCallback(const std::shared_ptr<laser_msgs::sr
 template <typename MsgT>
 std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time &ref_time, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name) {
   std::lock_guard<std::mutex> lock(sensor_data.mtx);
-
   if (sensor_data.buffer.empty()) {
     RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 2000, "[%s]: Message buffer empty.", sensor_name.c_str());
     return std::nullopt;
@@ -571,7 +570,7 @@ void EstimationManager::timerCallback() {
     bool         has_prediction{false};
     const double MAX_CONTROL_VALUE = 1.0e2;
 
-    if (!enable_px4_odom_ && !px4_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_px4_odom_ && !px4_odom_data_.is_active && !imu_data_.is_active) {
       if (!px4_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
       if (!imu_data_.is_active)
@@ -581,10 +580,12 @@ void EstimationManager::timerCallback() {
         return;
       }
     } else {
-      RCLCPP_INFO_ONCE(get_logger(), "PX4 odometry input is active, IMU input is active, or PX4 odometry is enabled.");
+      if (enable_px4_odom_) {
+        RCLCPP_INFO_ONCE(get_logger(), "PX4 odometry input is active, IMU input is active, or PX4 odometry is enabled.");
+      }
     }
 
-    if (!enable_fast_lio_odom_ && !px4_odom_data_.is_active && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_fast_lio_odom_ && !px4_odom_data_.is_active && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
       if (!fast_lio_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Fast-LIO odometry input is inactive.");
       if (!px4_odom_data_.is_active)
@@ -596,10 +597,13 @@ void EstimationManager::timerCallback() {
         return;
       }
     } else {
-      RCLCPP_INFO_ONCE(get_logger(), "Fast-LIO odometry input is active, PX4 odometry input is active, IMU input is active, or Fast-LIO odometry is enabled.");
+      if (enable_fast_lio_odom_) {
+        RCLCPP_INFO_ONCE(get_logger(),
+                         "Fast-LIO odometry input is active, PX4 odometry input is active, IMU input is active, or Fast-LIO odometry is enabled.");
+      }
     }
 
-    if (!enable_openvins_odom_ && !openvins_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_openvins_odom_ && !openvins_odom_data_.is_active && !imu_data_.is_active) {
       if (!openvins_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "OpenVINS odometry input is inactive.");
       if (!imu_data_.is_active)
@@ -609,7 +613,9 @@ void EstimationManager::timerCallback() {
         return;
       }
     } else {
-      RCLCPP_INFO_ONCE(get_logger(), "OpenVINS odometry input is active, IMU input is active, or OpenVINS odometry is enabled.");
+      if (enable_openvins_odom_) {
+        RCLCPP_INFO_ONCE(get_logger(), "OpenVINS odometry input is active, IMU input is active, or OpenVINS odometry is enabled.");
+      }
     }
 
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
