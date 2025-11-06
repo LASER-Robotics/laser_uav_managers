@@ -7,7 +7,7 @@
     odometry_switch_velocity_linear_threshold: 0.2 # m/s
     odometry_switch_velocity_angular_threshold: 0.2 # rad/s
 
-    initial_odometry_source: "fast_lio_odom"
+    initial_odometry_source: "px4_api_odom"
     odometry_source_names: ["px4_api_odom", "openvins_odom", "fast_lio_odom"]
     
     ekf_verbosity: "INFO" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
