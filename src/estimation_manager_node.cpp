@@ -670,32 +670,25 @@ void EstimationManager::timerCallback() {
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_pose_cov(px4_odom.pose.covariance.data());
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_twist_cov(px4_odom.twist.covariance.data());
 
-      if (px4_odom_covariance_ > px4_pose_cov.trace() && px4_odom_covariance_ > px4_twist_cov.trace()) {
-        pkg.px4_odometry  = *px4_odom_msg;
-        last_update_time_ = px4_odom_msg->header.stamp;
-        has_measurement   = true;
-      }
+      pkg.px4_odometry  = *px4_odom_msg;
+      last_update_time_ = px4_odom_msg->header.stamp;
+      has_measurement   = true;
     } else if (openvins_odom_msg && enable_openvins_odom_) {
       const auto                                   &openvins_odom = *openvins_odom_msg;
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> openvins_pose_cov(openvins_odom.pose.covariance.data());
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> openvins_twist_cov(openvins_odom.twist.covariance.data());
 
-      if (openvins_odom_covariance_ > openvins_pose_cov.trace() && openvins_odom_covariance_ > openvins_twist_cov.trace()) {
-        pkg.openvins      = *openvins_odom_msg;
-        last_update_time_ = openvins_odom_msg->header.stamp;
-        has_measurement   = true;
-      }
-      // } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+      pkg.openvins      = *openvins_odom_msg;
+      last_update_time_ = openvins_odom_msg->header.stamp;
+      has_measurement   = true;
     } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
       auto &fast_lio_odom = *fast_lio_odom_msg;
 
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_pose_cov(fast_lio_odom.pose.covariance.data());
       Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_twist_cov(fast_lio_odom.twist.covariance.data());
-      if (fast_lio_odom_covariance_ > fast_lio_pose_cov.trace() && fast_lio_odom_covariance_ > fast_lio_twist_cov.trace()) {
-        pkg.fast_lio      = fast_lio_odom;
-        last_update_time_ = fast_lio_odom.header.stamp;
-        has_measurement   = true;
-      }
+      pkg.fast_lio      = fast_lio_odom;
+      last_update_time_ = fast_lio_odom.header.stamp;
+      has_measurement   = true;
     }
 
     bool has_measurement_imu{false};
