@@ -585,11 +585,9 @@ void EstimationManager::timerCallback() {
       }
     }
 
-    if (enable_fast_lio_odom_ && !px4_odom_data_.is_active && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_fast_lio_odom_ && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
       if (!fast_lio_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Fast-LIO odometry input is inactive.");
-      if (!px4_odom_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
       if (!imu_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
       if (!is_ekf_active_) {
@@ -688,40 +686,15 @@ void EstimationManager::timerCallback() {
         has_measurement   = true;
       }
       // } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
-    } else if ((px4_odom_msg || fast_lio_odom_msg) && enable_fast_lio_odom_) {
-      if (px4_odom_msg) {
-        auto                                         &px4_odom = *px4_odom_msg;
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_pose_cov(px4_odom.pose.covariance.data());
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_twist_cov(px4_odom.twist.covariance.data());
+    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+      auto &fast_lio_odom = *fast_lio_odom_msg;
 
-        px4_odom.pose.pose.position.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
-
-        px4_odom.pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
-
-        if (px4_odom_covariance_ > px4_pose_cov.trace() && px4_odom_covariance_ > px4_twist_cov.trace()) {
-          pkg.px4_odometry = px4_odom;
-          has_measurement  = true;
-        }
-      }
-      if (fast_lio_odom_msg) {
-        auto &fast_lio_odom = *fast_lio_odom_msg;
-
-        fast_lio_odom.twist.twist.angular.x = std::numeric_limits<double>::quiet_NaN();
-        fast_lio_odom.twist.twist.angular.y = std::numeric_limits<double>::quiet_NaN();
-        fast_lio_odom.twist.twist.angular.z = std::numeric_limits<double>::quiet_NaN();
-
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_pose_cov(fast_lio_odom.pose.covariance.data());
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_twist_cov(fast_lio_odom.twist.covariance.data());
-        if (fast_lio_odom_covariance_ > fast_lio_pose_cov.trace() && fast_lio_odom_covariance_ > fast_lio_twist_cov.trace()) {
-          pkg.fast_lio      = fast_lio_odom;
-          last_update_time_ = fast_lio_odom.header.stamp;
-          has_measurement   = true;
-        }
+      Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_pose_cov(fast_lio_odom.pose.covariance.data());
+      Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_twist_cov(fast_lio_odom.twist.covariance.data());
+      if (fast_lio_odom_covariance_ > fast_lio_pose_cov.trace() && fast_lio_odom_covariance_ > fast_lio_twist_cov.trace()) {
+        pkg.fast_lio      = fast_lio_odom;
+        last_update_time_ = fast_lio_odom.header.stamp;
+        has_measurement   = true;
       }
     }
 

@@ -100,7 +100,7 @@ def generate_launch_description():
         ],
         remappings=[
             ('odometry_in', 'px4_api/odometry'),
-            ('odometry_fast_lio_in', 'fast_lio/odometry'),
+            ('odometry_fast_lio_in', 'fast_lio/odometry_high_freq'),
             ('odometry_openvins_in', 'vins_republisher/odometry'),
             ('imu_in', 'px4_api/imu'),
             ('control_in', 'control_manager/diagnostics'),
