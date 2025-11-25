@@ -97,7 +97,6 @@ def generate_launch_description():
             ('/' + uav_name + '/attitude_rates_thrust_out', '/' + uav_name + '/control_manager/attitude_rates_thrust'),
             ('/' + uav_name + '/goto_in', '/' + uav_name + '/control_manager/goto'),
             ('/' + uav_name + '/trajectory_path_in', '/' + uav_name + '/control_manager/trajectory_path'),
-            ('/' + uav_name + '/planner_view_out', '/' + uav_name + '/control_manager/planner_view'),
             ('/' + uav_name + '/takeoff', '/' + uav_name + '/control_manager/takeoff'),
             ('/' + uav_name + '/land', '/' + uav_name + '/control_manager/land'),
             ('/' + uav_name + '/api_diagnostics_in', '/' + uav_name + '/px4_api/diagnostics'),
