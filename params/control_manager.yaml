@@ -19,7 +19,7 @@
         motor_a: [1.0000, -1.5782, 0.6528]
         motor_b: [0.018650, 0.037301, 0.018650]
 
-    safety_area:
+    safe_area:
       enabled: false
 
       # This is the range of the safety area in x, y and z axis
