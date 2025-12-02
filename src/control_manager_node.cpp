@@ -65,6 +65,11 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("nmpc_controller.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
   declare_parameter("nmpc_controller.R", rclcpp::ParameterValue(0.0));
 
+  declare_parameter("safety_area.enabled", rclcpp::ParameterValue(false));
+  declare_parameter("safety_area.constraints.x", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+  declare_parameter("safety_area.constraints.y", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+  declare_parameter("safety_area.constraints.z", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+
   odometry_           = nav_msgs::msg::Odometry();
   diagnostics_        = laser_msgs::msg::UavControlDiagnostics();
   diagnostics_.is_fly = false;
@@ -248,6 +253,14 @@ void ControlManagerNode::getParameters() {
 
   get_parameter("nmpc_controller.R", _acados_params_.R);
 
+  get_parameter("safety_area.enabled", _safety_area_.enabled);
+  get_parameter("safety_area.constraints.x", aux);
+  _safety_area_.x = aux.as_double_array();
+  get_parameter("safety_area.constraints.y", aux);
+  _safety_area_.y = aux.as_double_array();
+  get_parameter("safety_area.constraints.z", aux);
+  _safety_area_.z = aux.as_double_array();
+
   nmpc_control_input_    = Eigen::VectorXd(_controller_quadrotor_params_.n_motors);
   motor_speed_estimated_ = Eigen::VectorXd(_controller_quadrotor_params_.n_motors);
 }
@@ -329,6 +342,73 @@ double ControlManagerNode::quaternionToHeading(const Eigen::Quaterniond &q) {
 }
 //}
 
+/* checkSafetyArea() //{ */
+void ControlManagerNode::checkSafetyArea() {
+  if (!is_active_) {
+    return;
+  }
+
+  bool                             path_is_ok = true;
+  laser_msgs::msg::PoseWithHeading emergency_hover_reference;
+  emergency_hover_reference.position = last_waypoint_.pose.position;
+
+  if (current_horizon_path_[0].pose.position.x < _safety_area_.x[0]) {
+    emergency_hover_reference.position.x = _safety_area_.x[0] + 0.05;
+    path_is_ok                           = false;
+  } else if (current_horizon_path_[0].pose.position.x > _safety_area_.x[1]) {
+    emergency_hover_reference.position.x = _safety_area_.x[1] - 0.05;
+    path_is_ok                           = false;
+  }
+
+  if (current_horizon_path_[0].pose.position.y < _safety_area_.y[0]) {
+    emergency_hover_reference.position.y = _safety_area_.y[0];
+    path_is_ok                           = false;
+  } else if (current_horizon_path_[0].pose.position.y > _safety_area_.y[1]) {
+    emergency_hover_reference.position.y = _safety_area_.y[1] - 0.05;
+    path_is_ok                           = false;
+  }
+
+  if (requested_takeoff_ || requested_land_) {
+    if (current_horizon_path_[0].pose.position.z > _safety_area_.z[1]) {
+      emergency_hover_reference.position.z = _safety_area_.z[1] - 0.05;
+      path_is_ok                           = false;
+    }
+  } else {
+    if (current_horizon_path_[0].pose.position.z < _safety_area_.z[0]) {
+      emergency_hover_reference.position.z = _safety_area_.z[0] + 0.05;
+      path_is_ok                           = false;
+    } else if (current_horizon_path_[0].pose.position.z > _safety_area_.z[1]) {
+      emergency_hover_reference.position.z = _safety_area_.z[1] - 0.05;
+      path_is_ok                           = false;
+    }
+  }
+
+  if (!path_is_ok) {
+    RCLCPP_WARN(this->get_logger(),
+                "Trajectory will not be executed because the next trajectory points are outside the safety area. Entering emergency hover. Please submit a "
+                "valid point within the safety area.");
+    RCLCPP_WARN(this->get_logger(),
+                "\nSafety Area Constraints:\n"
+                " (x , y)\n"
+                "(%.1f, %.1f)  --------------------- (%.1f, -%.1f)\n"
+                "     |                                 |\n"
+                "     |                                 |\n"
+                "     |                                 |   %.1f <= z <= %.1f\n"
+                "     |                                 |\n"
+                "     |                                 |\n"
+                "(-%.1f, %.1f) --------------------- (-%.1f, -%.1f)",
+                _safety_area_.x[1], _safety_area_.y[1], _safety_area_.x[1], _safety_area_.y[0], _safety_area_.z[0], _safety_area_.z[1], _safety_area_.x[0],
+                _safety_area_.y[1], _safety_area_.x[0], _safety_area_.y[0]);
+
+    Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
+                         last_waypoint_.pose.orientation.z);
+    emergency_hover_reference.heading = quaternionToHeading(q);
+    agile_planner_.generateTrajectory(last_waypoint_, emergency_hover_reference, 0.0, false);
+    emergency_hover_ = true;
+  }
+}
+//}
+
 /* subOdometry() //{ */
 void ControlManagerNode::subOdometry(const nav_msgs::msg::Odometry &msg) {
   if (!is_active_) {
@@ -391,7 +471,8 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
-    desired_path_ = msg.waypoints;
+    desired_path_    = msg.waypoints;
+    emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
   } else {
     RCLCPP_WARN(this->get_logger(), "Trajectory not will executed, because the uav is not flying.");
@@ -407,6 +488,7 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
+    emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
   } else {
     RCLCPP_WARN(this->get_logger(), "GOTO's Point not will executed, because the uav is not flying.");
@@ -523,11 +605,17 @@ void ControlManagerNode::tmrExternalLoopControl() {
       }
     } else {
       current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1);
-      last_waypoint_        = current_horizon_path_[0];
+      if (_safety_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
+        checkSafetyArea();
+      }
+      last_waypoint_ = current_horizon_path_[0];
     }
   } else {
     current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1);
-    last_waypoint_        = current_horizon_path_[0];
+    if (_safety_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
+      checkSafetyArea();
+    }
+    last_waypoint_ = current_horizon_path_[0];
   }
 
   nmpc_control_input_      = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
