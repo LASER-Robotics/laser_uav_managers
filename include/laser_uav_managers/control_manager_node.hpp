@@ -30,6 +30,17 @@ using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
 
 namespace laser_uav_managers
 {
+
+/* safe_area_t //{ */
+struct safe_area_t
+{
+  bool                enabled;
+  std::vector<double> x;
+  std::vector<double> y;
+  std::vector<double> z;
+};
+//}
+
 class ControlManagerNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit ControlManagerNode(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
@@ -55,6 +66,7 @@ private:
   void   configServices();
   void   configClasses();
   double quaternionToHeading(const Eigen::Quaterniond &q);
+  void   checkSafeArea();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
@@ -110,6 +122,8 @@ private:
   laser_uav_controllers::NmpcController nmpc_controller_;
   laser_uav_controllers::IndiController indi_controller_;
 
+  safe_area_t _safe_area_;
+
   std::vector<double>      _gyro_a_;
   std::vector<double>      _gyro_b_;
   laser_uav_lib::IIRFilter btw_gyro_x_;
@@ -133,6 +147,7 @@ private:
   double _takeoff_height_;
   double _takeoff_speed_;
 
+  bool emergency_hover_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
