@@ -27,11 +27,11 @@ def load_ekf_path(context, *args, **kwargs):
         estimator_name = config_data['/**/**']['ros__parameters']['initial_odometry_source']
         
         if(estimator_name == 'fast_lio_odom'):
-            estimator_config_file = 'fast_lio_state_estimator.yaml'
+            estimator_config_file = 'eskf_lio_state_estimator.yaml'
         elif(estimator_name == 'openvins_odom'):
-            estimator_config_file = 'openvins_state_estimator.yaml'
+            estimator_config_file = 'eskf_vio_state_estimator.yaml'
         elif(estimator_name == 'px4_api_odom'):
-            estimator_config_file = 'px4_api_state_estimator.yaml'
+            estimator_config_file = 'eskf_px4_state_estimator.yaml'
         else:
             estimator_config_file = 'state_estimator.yaml'
 
@@ -66,7 +66,7 @@ def generate_launch_description():
         default_value=PathJoinSubstitution([
             FindPackageShare('laser_uav_managers'),
             'params',
-            'estimation_manager.yaml'
+            'eskf_estimation_manager.yaml'
         ]),
         description='Path to the manager parameters file.'
     )
@@ -87,11 +87,11 @@ def generate_launch_description():
     )
 
     set_ekf_path_action = OpaqueFunction(function=load_ekf_path)
-
+    
     estimation_manager_node = LifecycleNode(
         package='laser_uav_managers',
-        executable='estimation_manager_main',
-        name='estimation_manager',
+        executable='error_estimation_manager_main',
+        name='esekf_estimation_manager',
         namespace=EnvironmentVariable('UAV_NAME', default_value='uav'),
         output='screen',
         parameters=[
@@ -104,12 +104,11 @@ def generate_launch_description():
             ('odometry_in', 'px4_api/odometry'),
             ('odometry_fast_lio_in', 'fast_lio/odometry'),
             ('odometry_openvins_in', 'vins_republisher/odometry'),
-            ('imu_in', 'px4_api/imu'),
-            ('control_in', 'control_manager/diagnostics'),
-            ('odometry_out', 'bag_estimation_manager/estimation'),
-            ('odometry_predict', 'bag_estimation_manager/estimation_predict'),
-            ('set_odometry', 'set_odometry'),
-            ('diagnostics', 'bag_estimation_manager/diagnostics'),
+            ('imu_in', 'px4_api/imu/filtered'),
+            ('odometry_out', 'esekf_estimation_manager/estimation'),
+            ('odometry_predict', 'esekf_estimation_manager/estimation_predict'),
+            ('set_odometry', 'esekf_estimation_manager/set_odometry'),
+            ('diagnostics', 'esekf_estimation_manager/diagnostics'),
         ]
     )
 

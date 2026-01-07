@@ -28,6 +28,7 @@ find_package(laser_uav_planners REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
 find_package(laser_uav_estimators REQUIRED)
 find_package(laser_uav_lib REQUIRED)
+find_package(Sophus REQUIRED)
 
 
 set(acados_include "$ENV{ACADOS_SOURCE_DIR}/include")
@@ -50,6 +51,7 @@ laser_uav_planners
 laser_uav_controllers
 laser_uav_estimators
 laser_uav_lib
+Sophus
 )
 
 find_library(laser_uav_lib laser_uav_lib)
@@ -69,6 +71,7 @@ include_directories(
 	${acados_include}/acados/
 	${acados_include}/qpOASES_e/
   ${EIGEN3_INCLUDE_DIR}
+  ${Sophus_INCLUDE_DIRS}
 )
 
 set(control_executable_name control_manager)
@@ -116,6 +119,7 @@ ament_target_dependencies(${estimation_library_name}
 
 target_link_libraries(${estimation_library_name}
   ${laser_uav_estimators}
+  Sophus::Sophus
 )
 
 add_executable(${estimation_executable_name}
@@ -132,14 +136,44 @@ target_link_libraries(${estimation_executable_name}
 
 rclcpp_components_register_nodes(${estimation_library_name} "laser_uav_managers::EstimationManager")
 
+set(error_estimation_library_name "error_estimation_manager_node")
+set(error_estimation_executable_name "error_estimation_manager_main")
 
-install(TARGETS ${library_name} ${estimation_library_name}
+add_library(${error_estimation_library_name} SHARED
+  src/eskf_estimation_manager_node.cpp
+)
+
+ament_target_dependencies(${error_estimation_library_name}
+  ${dependencies}
+)
+
+target_link_libraries(${error_estimation_library_name}
+  ${laser_uav_estimators}
+  Sophus::Sophus
+)
+
+add_executable(${error_estimation_executable_name}
+  src/eskf_estimation_manager_main.cpp
+)
+
+ament_target_dependencies(${error_estimation_executable_name}
+  ${dependencies}
+)
+
+target_link_libraries(${error_estimation_executable_name}
+  ${error_estimation_library_name}
+)
+
+rclcpp_components_register_nodes(${error_estimation_library_name} "laser_uav_managers::ErrorEstimationManager")
+
+
+install(TARGETS ${library_name} ${estimation_library_name} ${error_estimation_library_name}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(TARGETS ${control_executable_name} ${estimation_executable_name}
+install(TARGETS ${control_executable_name} ${estimation_executable_name} ${error_estimation_executable_name}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
