@@ -89,7 +89,8 @@ def generate_launch_description():
         output='screen',
         parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[
-            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            # ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/esekf_estimation_manager/estimation'),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/px4_api/motor_speed_estimated'),
             ('/' + uav_name + '/imu_in', '/' + uav_name + '/px4_api/imu'),
             ('/' + uav_name + '/motor_speed_reference_out', '/' + uav_name + '/control_manager/motor_speed_reference'),
