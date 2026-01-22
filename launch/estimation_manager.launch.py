@@ -106,10 +106,10 @@ def generate_launch_description():
             ('odometry_openvins_in', 'vins_republisher/odometry'),
             ('imu_in', 'px4_api/imu'),
             ('control_in', 'control_manager/diagnostics'),
-            ('odometry_out', 'bag_estimation_manager/estimation'),
-            ('odometry_predict', 'bag_estimation_manager/estimation_predict'),
+            ('odometry_out', 'estimation_manager/estimation'),
+            ('odometry_predict', 'estimation_manager/estimation_predict'),
             ('set_odometry', 'set_odometry'),
-            ('diagnostics', 'bag_estimation_manager/diagnostics'),
+            ('diagnostics', 'estimation_manager/diagnostics'),
         ]
     )
 
