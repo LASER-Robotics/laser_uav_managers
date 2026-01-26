@@ -667,6 +667,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
       agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
     }
   }
+
+  diagnostics_.have_goal = !agile_planner_.isHover();
 }
 //}
 
