@@ -397,8 +397,8 @@ void ControlManagerNode::checkSafeArea() {
                 "     |                                 |\n"
                 "     |                                 |\n"
                 "(-%.1f, %.1f) --------------------- (-%.1f, -%.1f)",
-                _safe_area_.x[1], _safe_area_.y[1], _safe_area_.x[1], _safe_area_.y[0], _safe_area_.z[0], _safe_area_.z[1], _safe_area_.x[0],
-                _safe_area_.y[1], _safe_area_.x[0], _safe_area_.y[0]);
+                _safe_area_.x[1], _safe_area_.y[1], _safe_area_.x[1], _safe_area_.y[0], _safe_area_.z[0], _safe_area_.z[1], _safe_area_.x[0], _safe_area_.y[1],
+                _safe_area_.x[0], _safe_area_.y[0]);
 
     Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
                          last_waypoint_.pose.orientation.z);
@@ -667,6 +667,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
       agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
     }
   }
+
+  diagnostics_.have_goal = !agile_planner_.isHover();
 }
 //}
 
