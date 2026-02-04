@@ -388,11 +388,10 @@ void ErrorEstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odome
 void ErrorEstimationManager::odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(fast_lio_odom_data_.mtx);
   fast_lio_odom_data_.buffer[msg->header.stamp] = msg;
-  // RCLCPP_DEBUG(get_logger(), "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec *
-  // 1e-9,
-  //              ((fast_lio_odom_data_.last_msg != nullptr)
-  //                   ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
-  //                   : 0.0));
+  RCLCPP_DEBUG(get_logger(), "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+               ((fast_lio_odom_data_.last_msg != nullptr)
+                    ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
+                    : 0.0));
   fast_lio_odom_data_.last_msg = msg;
 }
 //}

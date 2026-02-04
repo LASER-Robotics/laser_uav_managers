@@ -166,8 +166,9 @@ void EstimationManager::getParameters() {
   get_parameter("odometry_switch_velocity_angular_threshold", odometry_switch_velocity_angular_threshold_);
   get_parameter("sensor_timeout", sensor_timeout_);
   get_parameter("ekf_verbosity", ekf_verbosity_);
+  get_parameter("estimation_verbosity", estimation_verbosity_);
 
-  set_verbosity(ekf_verbosity_);
+  set_verbosity(estimation_verbosity_);
 
   get_parameter("multirotor_parameters.mass", mass_);
   get_parameter("multirotor_parameters.inertia", inertia_vec_);
@@ -705,10 +706,6 @@ void EstimationManager::timerCallback() {
         imu_msg->orientation.y = std::numeric_limits<double>::quiet_NaN();
         imu_msg->orientation.z = std::numeric_limits<double>::quiet_NaN();
         imu_msg->orientation.w = std::numeric_limits<double>::quiet_NaN();
-
-        imu_msg->linear_acceleration.x = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->linear_acceleration.y = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->linear_acceleration.z = std::numeric_limits<double>::quiet_NaN();
 
         pkg.imu             = imu_msg;
         has_measurement_imu = true;

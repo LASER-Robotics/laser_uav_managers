@@ -169,6 +169,7 @@ private:
   double              frequency_;
   double              sensor_timeout_;
   std::string         ekf_verbosity_;
+  std::string         estimation_verbosity_;
   double              mass_;
   double              arm_length_;
   double              thrust_coefficient_;

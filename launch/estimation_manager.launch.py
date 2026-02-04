@@ -104,7 +104,7 @@ def generate_launch_description():
             ('odometry_in', 'px4_api/odometry'),
             ('odometry_fast_lio_in', 'fast_lio/odometry'),
             ('odometry_openvins_in', 'vins_republisher/odometry'),
-            ('imu_in', 'px4_api/imu'),
+            ('imu_in', 'px4_api/filtered/imu'),
             ('control_in', 'control_manager/diagnostics'),
             ('odometry_out', 'estimation_manager/estimation'),
             ('odometry_predict', 'estimation_manager/estimation_predict'),

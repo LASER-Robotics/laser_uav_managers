@@ -281,8 +281,8 @@ void ControlManagerNode::configPubSub() {
     pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
   } else {
     sub_imu_                   = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
-    sub_motor_speed_           = create_subscription<laser_msgs::msg::MotorSpeed>("motor_speed_estimation_in", 1,
-                                                                        std::bind(&ControlManagerNode::subMotorSpeed, this, std::placeholders::_1));
+    sub_motor_speed_           = create_subscription<laser_msgs::msg::MotorSpeedStamped>("motor_speed_estimation_in", 1,
+                                                                               std::bind(&ControlManagerNode::subMotorSpeed, this, std::placeholders::_1));
     pub_motor_speed_reference_ = create_publisher<laser_msgs::msg::MotorSpeed>("motor_speed_reference_out", 10);
   }
   pub_diagnostics_ = create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
@@ -397,8 +397,8 @@ void ControlManagerNode::checkSafeArea() {
                 "     |                                 |\n"
                 "     |                                 |\n"
                 "(-%.1f, %.1f) --------------------- (-%.1f, -%.1f)",
-                _safe_area_.x[1], _safe_area_.y[1], _safe_area_.x[1], _safe_area_.y[0], _safe_area_.z[0], _safe_area_.z[1], _safe_area_.x[0],
-                _safe_area_.y[1], _safe_area_.x[0], _safe_area_.y[0]);
+                _safe_area_.x[1], _safe_area_.y[1], _safe_area_.x[1], _safe_area_.y[0], _safe_area_.z[0], _safe_area_.z[1], _safe_area_.x[0], _safe_area_.y[1],
+                _safe_area_.x[0], _safe_area_.y[0]);
 
     Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
                          last_waypoint_.pose.orientation.z);
@@ -440,13 +440,13 @@ void ControlManagerNode::subImu(const sensor_msgs::msg::Imu &msg) {
 //}
 
 /* subMotorSpeed() //{ */
-void ControlManagerNode::subMotorSpeed(const laser_msgs::msg::MotorSpeed &msg) {
+void ControlManagerNode::subMotorSpeed(const laser_msgs::msg::MotorSpeedStamped &msg) {
   if (!is_active_) {
     return;
   }
 
-  for (auto i = 0; i < (int)msg.data.size(); i++) {
-    motor_speed_estimated_(i) = btw_motors_[i].iterate(msg.data[i]);
+  for (auto i = 0; i < (int)msg.data.data.size(); i++) {
+    motor_speed_estimated_(i) = btw_motors_[i].iterate(msg.data.data[i]);
   }
 }
 //}
