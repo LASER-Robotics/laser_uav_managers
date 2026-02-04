@@ -167,13 +167,44 @@ target_link_libraries(${error_estimation_executable_name}
 rclcpp_components_register_nodes(${error_estimation_library_name} "laser_uav_managers::ErrorEstimationManager")
 
 
-install(TARGETS ${library_name} ${estimation_library_name} ${error_estimation_library_name}
+set(mekf_estimation_library_name "mekf_estimation_manager_node")
+set(mekf_estimation_executable_name "mekf_estimation_manager_main")
+
+add_library(${mekf_estimation_library_name} SHARED
+  src/mekf_estimation_manager_node.cpp
+)
+
+ament_target_dependencies(${mekf_estimation_library_name}
+  ${dependencies}
+)
+
+target_link_libraries(${mekf_estimation_library_name}
+  ${laser_uav_estimators}
+  Sophus::Sophus
+)
+
+add_executable(${mekf_estimation_executable_name}
+  src/mekf_estimation_manager_main.cpp
+)
+
+ament_target_dependencies(${mekf_estimation_executable_name}
+  ${dependencies}
+)
+
+target_link_libraries(${mekf_estimation_executable_name}
+  ${mekf_estimation_library_name}
+)
+
+rclcpp_components_register_nodes(${mekf_estimation_library_name} "laser_uav_managers::MEKFEstimator")
+
+
+install(TARGETS ${library_name} ${estimation_library_name} ${error_estimation_library_name} ${mekf_estimation_library_name}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(TARGETS ${control_executable_name} ${estimation_executable_name} ${error_estimation_executable_name}
+install(TARGETS ${control_executable_name} ${estimation_executable_name} ${error_estimation_executable_name} ${mekf_estimation_executable_name}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

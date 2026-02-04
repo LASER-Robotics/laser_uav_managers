@@ -1,0 +1,18 @@
+/**/**:
+  ros__parameters:
+    frequency: 100.0 # Hz
+
+    odometry_switch_distance_threshold: 0.5 # meters
+    odometry_switch_angle_threshold: 0.1 # radians
+    odometry_switch_velocity_linear_threshold: 0.2 # m/s
+    odometry_switch_velocity_angular_threshold: 0.2 # rad/s
+
+    ekf_verbosity: "DEBUG" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
+    estimation_verbosity: "DEBUG" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
+
+    odom_tolerance: 0.015 # seconds
+    odom_timeout: 0.5 # seconds
+    odom_covariance: 0.5
+
+    control_tolerance: 0.015 # seconds
+    control_timeout: 0.5 # seconds
