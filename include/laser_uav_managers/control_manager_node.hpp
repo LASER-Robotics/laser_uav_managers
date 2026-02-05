@@ -18,6 +18,7 @@
 #include <laser_msgs/msg/api_px4_diagnostics.hpp>
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 #include <laser_msgs/msg/trajectory_path.hpp>
+#include <laser_msgs/msg/motor_speed_stamped.hpp>
 #include <laser_msgs/msg/motor_speed.hpp>
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
@@ -74,8 +75,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr sub_imu_;
   void                                                        subImu(const sensor_msgs::msg::Imu &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::MotorSpeed>::ConstSharedPtr sub_motor_speed_;
-  void                                                              subMotorSpeed(const laser_msgs::msg::MotorSpeed &msg);
+  rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::ConstSharedPtr sub_motor_speed_;
+  void                                                              subMotorSpeedStamped(const laser_msgs::msg::MotorSpeedStamped &msg);
 
   rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
   void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
