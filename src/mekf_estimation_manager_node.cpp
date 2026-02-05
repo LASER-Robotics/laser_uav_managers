@@ -522,26 +522,15 @@ void MekfEstimationManager::timerCallback() {
         last_control_input_time_  = current_time;
 
         bool can_predict = true;
-        std::cout << "Can Predict Check 1: " << can_predict << std::endl;
         if (dt_sec < 0 || dt_sec > 1.0) {
           can_predict = false;
         }
-        std::cout << "Can Predict Check 2: " << can_predict << std::endl;
 
 
         if (can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
           RCLCPP_ERROR(get_logger(), "Control input size does not match number of motors (%d). Resizing input vector.", allocation_matrix_.cols());
         }
-        std::cout << "Can Predict Check 3: " << can_predict << std::endl;
-
-        std::cout << "Control Input: [ ";
-        for (const auto &v : control_msg->last_control_input.data) {
-          std::cout << v << " ";
-        }
-        std::cout << "]" << std::endl;
-
-        std::cout << "N Motors: " << allocation_matrix_.cols() << std::endl;
 
 
         if (can_predict) {
@@ -559,16 +548,13 @@ void MekfEstimationManager::timerCallback() {
                          control_input[2], control_input[3]);
             can_predict = false;
           }
-          std::cout << "Can Predict Check 4: " << can_predict << std::endl;
 
           if (can_predict) {
             mekf_->predict(control_input, dt_sec);
-            std::cout << "Can Predict Check 5: " << can_predict << std::endl;
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
-            std::cout << "Can Predict Check 6: " << can_predict << std::endl;
             publishOdometry(predict_pub_, stamp);
-            std::cout << "Can Predict Check 7: " << can_predict << std::endl;
             has_prediction = true;
+            is_prediction  = true;
           }
         }
       }
@@ -576,12 +562,12 @@ void MekfEstimationManager::timerCallback() {
 
     bool has_measurement{false};
 
-    if (px4_odom_msg.has_value() && enable_px4_odom_) {
+    if (is_prediction && px4_odom_msg.has_value() && enable_px4_odom_) {
       mekf_->correct(px4_odom_msg.value());
+      has_measurement = true;
     }
-    bool has_measurement_imu{false};
 
-    if ((has_prediction) && !enable_openvins_odom_) {
+    if (has_prediction || has_measurement) {
       publishOdometry(odom_pub_, last_update_time_);
       is_ekf_active_ = true;
     }

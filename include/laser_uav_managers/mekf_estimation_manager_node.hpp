@@ -156,6 +156,7 @@ private:
   bool is_control_input_{false};
   bool is_initialized_{false};
   bool is_first_control_msg{false};
+  bool is_prediction{false};
   bool enable_px4_odom_{false};
   bool enable_openvins_odom_{false};
   bool enable_fast_lio_odom_{false};
