@@ -5,7 +5,7 @@
       mass: 2.0 # Kg
 
       # Diagonal of Inertia Matrix
-      inertia: [0.02631, 0.02700, 0.0441]
+      inertia: [0.03166, 0.03166, 0.0461]
 
       # Thrust constant {Ct}
       c_thrust: 27.6e-6 # This constant is the thrust coefficient
