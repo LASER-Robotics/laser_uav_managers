@@ -24,7 +24,6 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("agile_planner.multirotor_parameters.max_accel", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.multirotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.multirotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
-  declare_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", rclcpp::ParameterValue(1.0));
 
   declare_parameter("agile_planner.ltd_opt.use_drag", rclcpp::ParameterValue(false));
   declare_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", rclcpp::ParameterValue(0.0));
@@ -190,7 +189,6 @@ void ControlManagerNode::getParameters() {
   get_parameter("agile_planner.multirotor_parameters.max_accel", _pmm_params_.max_accel_norm);
   get_parameter("agile_planner.multirotor_parameters.max_vel", _pmm_params_.max_vel_norm);
   get_parameter("agile_planner.multirotor_parameters.default_vel", _pmm_params_.default_vel_norm);
-  get_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", _pmm_params_.absolute_maximum_angular_accel);
 
   get_parameter("agile_planner.ltd_opt.use_drag", _pmm_params_.use_drag);
   get_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", _pmm_params_.thrust_decomp_acc_precision);
