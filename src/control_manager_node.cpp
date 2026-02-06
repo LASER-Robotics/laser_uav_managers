@@ -278,15 +278,11 @@ void ControlManagerNode::configPubSub() {
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
   } else {
-<<<<<<< HEAD
-    sub_imu_                   = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
-    sub_motor_speed_           = create_subscription<laser_msgs::msg::MotorSpeedStamped>("motor_speed_estimation_in", 1,
-                                                                               std::bind(&ControlManagerNode::subMotorSpeed, this, std::placeholders::_1));
-=======
-    sub_imu_         = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
+    sub_imu_ = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
+
     sub_motor_speed_ = create_subscription<laser_msgs::msg::MotorSpeedStamped>(
         "motor_speed_estimation_in", 1, std::bind(&ControlManagerNode::subMotorSpeedStamped, this, std::placeholders::_1));
->>>>>>> origin/release/1.0
+
     pub_motor_speed_reference_ = create_publisher<laser_msgs::msg::MotorSpeed>("motor_speed_reference_out", 10);
   }
   pub_diagnostics_ = create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
