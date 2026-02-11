@@ -543,8 +543,7 @@ std::optional<MsgT> ErrorEstimationManager::getSynchronizedMessage(const rclcpp:
     std::optional<MsgT> msg_copy = *best_match_it->second;
     sensor_data.is_active        = true;
     sensor_data.buffer.erase(best_match_it);
-    // RCLCPP_DEBUG(get_logger(), "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(), min_diff.seconds() * 1000.0,
-    //              sensor_data.tolerance.seconds() * 1000.0);
+    RCLCPP_DEBUG(get_logger(), "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(), min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
     return msg_copy;
   }
 
