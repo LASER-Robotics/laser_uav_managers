@@ -24,7 +24,6 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("agile_planner.multirotor_parameters.max_accel", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.multirotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
   declare_parameter("agile_planner.multirotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
-  declare_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", rclcpp::ParameterValue(1.0));
 
   declare_parameter("agile_planner.ltd_opt.use_drag", rclcpp::ParameterValue(false));
   declare_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", rclcpp::ParameterValue(0.0));
@@ -190,7 +189,6 @@ void ControlManagerNode::getParameters() {
   get_parameter("agile_planner.multirotor_parameters.max_accel", _pmm_params_.max_accel_norm);
   get_parameter("agile_planner.multirotor_parameters.max_vel", _pmm_params_.max_vel_norm);
   get_parameter("agile_planner.multirotor_parameters.default_vel", _pmm_params_.default_vel_norm);
-  get_parameter("agile_planner.multirotor_parameters.absolute_maximum_angular_accel", _pmm_params_.absolute_maximum_angular_accel);
 
   get_parameter("agile_planner.ltd_opt.use_drag", _pmm_params_.use_drag);
   get_parameter("agile_planner.ltd_opt.thrust_decomp_acc_precision", _pmm_params_.thrust_decomp_acc_precision);
@@ -280,9 +278,11 @@ void ControlManagerNode::configPubSub() {
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_ = create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
   } else {
-    sub_imu_                   = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
-    sub_motor_speed_           = create_subscription<laser_msgs::msg::MotorSpeedStamped>("motor_speed_estimation_in", 1,
-                                                                               std::bind(&ControlManagerNode::subMotorSpeed, this, std::placeholders::_1));
+    sub_imu_ = create_subscription<sensor_msgs::msg::Imu>("imu_in", 1, std::bind(&ControlManagerNode::subImu, this, std::placeholders::_1));
+
+    sub_motor_speed_ = create_subscription<laser_msgs::msg::MotorSpeedStamped>(
+        "motor_speed_estimation_in", 1, std::bind(&ControlManagerNode::subMotorSpeedStamped, this, std::placeholders::_1));
+
     pub_motor_speed_reference_ = create_publisher<laser_msgs::msg::MotorSpeed>("motor_speed_reference_out", 10);
   }
   pub_diagnostics_ = create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
@@ -439,8 +439,8 @@ void ControlManagerNode::subImu(const sensor_msgs::msg::Imu &msg) {
 }
 //}
 
-/* subMotorSpeed() //{ */
-void ControlManagerNode::subMotorSpeed(const laser_msgs::msg::MotorSpeedStamped &msg) {
+/* subMotorSpeedStamped() //{ */
+void ControlManagerNode::subMotorSpeedStamped(const laser_msgs::msg::MotorSpeedStamped &msg) {
   if (!is_active_) {
     return;
   }
@@ -667,6 +667,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
       agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
     }
   }
+
+  diagnostics_.have_goal = !agile_planner_.isHover();
 }
 //}
 

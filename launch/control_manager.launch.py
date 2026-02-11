@@ -93,7 +93,7 @@ def generate_launch_description():
             # ('/' + uav_name + '/odometry_in', '/' + uav_name + '/fast_lio/odometry_high_freq'),
             ('/' + uav_name + '/odometry_in', '/' + uav_name + '/esekf_estimation_manager/estimation'),
             # ('/' + uav_name + '/odometry_in', '/' + uav_name + '/mekf_estimation_manager/estimation'),
-            ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/px4_api/motor_speed_estimated'),
+            ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/hw_api/motor_speed_estimated'),
             ('/' + uav_name + '/imu_in', '/' + uav_name + '/px4_api/imu'),
             ('/' + uav_name + '/motor_speed_reference_out', '/' + uav_name + '/control_manager/motor_speed_reference'),
             ('/' + uav_name + '/diagnostics_out', '/' + uav_name + '/control_manager/diagnostics'),

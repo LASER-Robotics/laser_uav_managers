@@ -85,7 +85,7 @@ def generate_launch_description():
         ],
         remappings=[
             ('odometry_in', 'fast_lio/odometry_high_freq'),
-            # ('odometry_in', 'fast_lio/odometry'),
+            # ('odometry_in', 'px4_api/odometry'),
             ('control_in', 'control_manager/diagnostics'),
             ('odometry_out', 'mekf_estimation_manager/estimation'),
             ('motor_speed_in', 'px4_api/motor_speed_estimated'),
