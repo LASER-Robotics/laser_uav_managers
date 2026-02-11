@@ -35,5 +35,5 @@
 
       # Thrust Constraints
       thrust_min: 0.0 # N
-      thrust_max: 15.7 # N
-      total_thrust_max: 62.8 # N
+      thrust_max: 17.6 # N
+      total_thrust_max: 70.4 # N
