@@ -20,14 +20,18 @@ MekfEstimationManager::MekfEstimationManager(const rclcpp::NodeOptions &options)
   declare_parameter("multirotor_parameters.c_thrust", 1.0);
   declare_parameter("multirotor_parameters.G1", std::vector<double>{0.1, -0.1, -0.1, 0.1, 0.1, 0.1, -0.1, -0.1});
 
-  declare_parameter("process_noise_gains.position", 0.01);
+  declare_parameter("process_noise_gains.position_xy", 0.01);
+  declare_parameter("process_noise_gains.position_z", 0.01);
   declare_parameter("process_noise_gains.orientation", 0.01);
-  declare_parameter("process_noise_gains.linear_velocity", 0.1);
+  declare_parameter("process_noise_gains.linear_velocity_xy", 0.1);
+  declare_parameter("process_noise_gains.linear_velocity_z", 0.1);
   declare_parameter("process_noise_gains.angular_velocity", 0.1);
 
-  declare_parameter("measurement_noise_gains.position", 1.0);
+  declare_parameter("measurement_noise_gains.position_xy", 1.0);
+  declare_parameter("measurement_noise_gains.position_z", 1.0);
   declare_parameter("measurement_noise_gains.orientation", 1.0);
-  declare_parameter("measurement_noise_gains.linear_velocity", 1.0);
+  declare_parameter("measurement_noise_gains.linear_velocity_xy", 1.0);
+  declare_parameter("measurement_noise_gains.linear_velocity_z", 1.0);
   declare_parameter("measurement_noise_gains.angular_velocity", 1.0);
 
   declare_parameter("odom_tolerance", 0.1);
@@ -153,18 +157,18 @@ void MekfEstimationManager::getParameters() {
   int num_cols       = G1_vec.size() / 4;
   allocation_matrix_ = Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(G1_vec.data(), 4, num_cols);
 
-  get_parameter("process_noise_gains.position", process_noise_gains_.position);
+  get_parameter("process_noise_gains.position_xy", process_noise_gains_.position_xy);
+  get_parameter("process_noise_gains.position_z", process_noise_gains_.position_z);
   get_parameter("process_noise_gains.orientation", process_noise_gains_.orientation);
-  get_parameter("process_noise_gains.linear_velocity", process_noise_gains_.velocity_linear);
+  get_parameter("process_noise_gains.linear_velocity_xy", process_noise_gains_.velocity_linear_xy);
+  get_parameter("process_noise_gains.linear_velocity_z", process_noise_gains_.velocity_linear_z);
   get_parameter("process_noise_gains.angular_velocity", process_noise_gains_.velocity_angular);
-  get_parameter("measurement_noise_gains.position", measurement_noise_gains_.odometry.position);
+  get_parameter("measurement_noise_gains.position_xy", measurement_noise_gains_.odometry.position_xy);
+  get_parameter("measurement_noise_gains.position_z", measurement_noise_gains_.odometry.position_z);
   get_parameter("measurement_noise_gains.orientation", measurement_noise_gains_.odometry.orientation);
-  get_parameter("measurement_noise_gains.linear_velocity", measurement_noise_gains_.odometry.velocity_linear);
+  get_parameter("measurement_noise_gains.linear_velocity_xy", measurement_noise_gains_.odometry.velocity_linear_xy);
+  get_parameter("measurement_noise_gains.linear_velocity_z", measurement_noise_gains_.odometry.velocity_linear_z);
   get_parameter("measurement_noise_gains.angular_velocity", measurement_noise_gains_.odometry.velocity_angular);
-  get_parameter("measurement_noise_gains.imu.position", measurement_noise_gains_.imu.position);
-  get_parameter("measurement_noise_gains.imu.orientation", measurement_noise_gains_.imu.orientation);
-  get_parameter("measurement_noise_gains.imu.linear_velocity", measurement_noise_gains_.imu.velocity_linear);
-  get_parameter("measurement_noise_gains.imu.angular_velocity", measurement_noise_gains_.imu.velocity_angular);
 
   double tolerance, timeout;
 
@@ -485,13 +489,27 @@ void MekfEstimationManager::timerCallback() {
       return;
     }
 
-    rclcpp::Time reference_time = this->get_clock()->now();
+    rclcpp::Time reference_time;
 
-    auto px4_odom_msg = getSynchronizedMessage(reference_time, odom_data_, "PX4_ODOMETRY");
-    auto control_msg  = getSynchronizedMessage(reference_time, control_data_, "CONTROL");
+    if (control_data_.buffer.empty()) {
+      reference_time = this->get_clock()->now();
+    } else {
+      reference_time = control_data_.buffer.rbegin()->first;
+      if ((this->get_clock()->now() - reference_time) > control_data_.timeout) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Control input timeout detected. Last control message received %.2f s ago.",
+                             (this->get_clock()->now() - reference_time).seconds());
+        reference_time = this->get_clock()->now();
+      }
+    }
 
-    pruneSensorBuffer(reference_time, odom_data_, "PX4_ODOMETRY");
+    auto control_msg_  = getSynchronizedMessage(reference_time, control_data_, "CONTROL");
+    auto px4_odom_msg_ = getSynchronizedMessage(reference_time, odom_data_, "PX4_ODOMETRY");
+
+    auto control_msg  = control_data_.last_msg;
+    auto px4_odom_msg = odom_data_.last_msg;
+
     pruneSensorBuffer(reference_time, control_data_, "CONTROL");
+    pruneSensorBuffer(reference_time, odom_data_, "PX4_ODOMETRY");
 
     bool         has_prediction{false};
     const double MAX_CONTROL_VALUE = 1.0e2;
@@ -562,10 +580,11 @@ void MekfEstimationManager::timerCallback() {
 
     bool has_measurement{false};
 
-    if (is_prediction && px4_odom_msg.has_value() && enable_px4_odom_) {
-      mekf_->correct(px4_odom_msg.value());
+    if (is_prediction && px4_odom_msg && enable_px4_odom_) {
+      mekf_->correct(*px4_odom_msg);
       has_measurement = true;
     }
+    std::cout << "predict: " << has_prediction << ", measurement: " << has_measurement << std::endl;
 
     if (has_prediction || has_measurement) {
       publishOdometry(odom_pub_, last_update_time_);
