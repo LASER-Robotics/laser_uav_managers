@@ -293,7 +293,6 @@ void ControlManagerNode::configTimers() {
 
   tmr_external_loop_control_ = create_wall_timer(std::chrono::duration<double>(1.0 / _rate_external_loop_control_),
                                                  std::bind(&ControlManagerNode::tmrExternalLoopControl, this), nullptr);
-
   if (!angular_rates_and_thrust_mode_) {
     tmr_internal_loop_control_ = create_wall_timer(std::chrono::duration<double>(1.0 / _rate_internal_loop_control_),
                                                    std::bind(&ControlManagerNode::tmrInternalLoopControl, this), nullptr);
@@ -580,6 +579,45 @@ void ControlManagerNode::tmrExternalLoopControl() {
     return;
   }
 
+  if (land_rampdown_) {
+    RCLCPP_INFO(this->get_logger(), "Land Ramp Down: %.2f", land_start_rampdown_);
+
+    if (angular_rates_and_thrust_mode_) {
+      laser_msgs::msg::AttitudeRatesAndThrust msg;
+      msg.total_thrust_normalized = land_start_rampdown_;
+      msg.roll_rate               = 0;
+      msg.pitch_rate              = 0;
+      msg.yaw_rate                = 0;
+
+      pub_attitude_rates_and_thrust_reference_->publish(msg);
+    } else {
+      laser_msgs::msg::MotorSpeed msg;
+      for (auto i = 0; i < nmpc_control_input_.size(); i++) {
+        msg.data.push_back(land_start_rampdown_);
+      }
+      diagnostics_.last_control_input.data = nmpc_controller_.getLastIndividualThrust();
+      pub_motor_speed_reference_->publish(msg);
+    }
+
+    diagnostics_.last_control_input.unit_of_measurement = "N";
+    diagnostics_.last_control_input.data                = std::vector(
+                       _controller_quadrotor_params_.n_motors,
+                       laser_uav_controllers::throtleToThrust(_controller_quadrotor_params_.motor_curve_a, _controller_quadrotor_params_.motor_curve_b, land_start_rampdown_));
+
+    if (land_start_rampdown_ == 0.0) {
+      land_rampdown_       = false;
+      lock_control_inputs_ = true;
+    }
+
+    land_start_rampdown_ -= 0.1;
+
+    if (land_start_rampdown_ < 0.0) {
+      land_start_rampdown_ = 0.0;
+    }
+
+    return;
+  }
+
   if (!_agile_fly_) {
     if (desired_path_.size() > 0) {
       if (!(last_waypoint_.pose.position.x == desired_path_[0].position.x && last_waypoint_.pose.position.y == desired_path_[0].position.y &&
@@ -622,7 +660,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
   diagnostics_.last_planner_waypoint = last_waypoint_;
 
   if (angular_rates_and_thrust_mode_) {
-    estimated_mass_for_detect_landing_ = (1 / 9.81) * nmpc_control_input_(0);
+    estimated_mass_for_detect_landing_ = (1 / GRAVITY) * nmpc_control_input_(0);
 
     laser_msgs::msg::AttitudeRatesAndThrust msg;
     msg.total_thrust_normalized =
@@ -648,11 +686,15 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   if (requested_land_) {
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2500, "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
-    if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * 0.70) {
-      requested_land_     = false;
-      land_done_          = true;
-      diagnostics_.is_fly = false;
+    if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * 0.80) {
+      requested_land_      = false;
+      land_done_           = true;
+      diagnostics_.is_fly  = false;
+      land_rampdown_       = true;
+      land_start_rampdown_ = laser_uav_controllers::thrustToThrotle(_controller_quadrotor_params_.motor_curve_a, _controller_quadrotor_params_.motor_curve_b,
+                                                                    (_controller_quadrotor_params_.mass * GRAVITY) / _controller_quadrotor_params_.n_motors);
       RCLCPP_INFO(this->get_logger(), "Landing Done!, Detected land with estimated mass: %.3f", estimated_mass_for_detect_landing_);
+      RCLCPP_INFO(this->get_logger(), "Start Land Ramp Down!");
     } else if (agile_planner_.isHover()) {
       laser_msgs::msg::PoseWithHeading land_waypoint;
       land_waypoint.position = last_waypoint_.pose.position;
@@ -680,11 +722,15 @@ void ControlManagerNode::tmrInternalLoopControl() {
     return;
   }
 
+  if (land_rampdown_) {
+    return;
+  }
+
   if (have_nmpc_control_input_) {
     Eigen::VectorXd indi_thrust =
         indi_controller_.getCorrection(angular_acceleration_estimated_, motor_speed_estimated_, nmpc_control_input_, last_angular_speed_);
 
-    estimated_mass_for_detect_landing_ = (1 / 9.81) * indi_thrust.sum();
+    estimated_mass_for_detect_landing_ = (1 / GRAVITY) * indi_thrust.sum();
 
     diagnostics_.last_control_input.unit_of_measurement = "N";
     diagnostics_.last_control_input.data                = std::vector<double>(indi_thrust.data(), indi_thrust.data() + indi_thrust.size());
