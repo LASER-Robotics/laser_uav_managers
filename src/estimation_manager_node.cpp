@@ -685,7 +685,8 @@ void EstimationManager::timerCallback() {
 
         if (can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
-          RCLCPP_ERROR(get_logger(), "Control input size does not match number of motors (%d). Resizing input vector.", allocation_matrix_.cols());
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Control input size does not match number of motors (%d). Resizing input vector.",
+                               allocation_matrix_.cols());
         }
 
 
@@ -732,14 +733,6 @@ void EstimationManager::timerCallback() {
       mekf_->correct(*fast_lio_odom_msg);
       last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
     }
-
-
-    // Correção do ternário: condição ? valor_se_true : valor_se_false
-    std::cout << "Openvins Enabled: " << (enable_openvins_odom_ ? "true" : "false") << std::endl;
-
-    // Para o ponteiro, é melhor checar se ele é diferente de nulo de forma clara
-    std::cout << "Openvins Has Last Msg: " << (openvins_odom_data_.last_msg ? "YES" : "NO") << std::endl;
-    std::cout << "px4_api Has Last Msg: " << (px4_odom_data_.last_msg ? "YES" : "NO") << std::endl;
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
       // Caso padrão: EKF ativo e OpenVins desligado
