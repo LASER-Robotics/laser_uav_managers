@@ -27,11 +27,11 @@ def load_ekf_path(context, *args, **kwargs):
         estimator_name = config_data['/**/**']['ros__parameters']['initial_odometry_source']
         
         if(estimator_name == 'fast_lio_odom'):
-            estimator_config_file = 'fast_lio_state_estimator.yaml'
+            estimator_config_file = 'mekf_fast_lio_state_estimator.yaml'
         elif(estimator_name == 'openvins_odom'):
-            estimator_config_file = 'openvins_state_estimator.yaml'
+            estimator_config_file = 'mekf_openvins_state_estimator.yaml'
         elif(estimator_name == 'px4_api_odom'):
-            estimator_config_file = 'px4_api_state_estimator.yaml'
+            estimator_config_file = 'mekf_px4_api_state_estimator.yaml'
         else:
             estimator_config_file = 'state_estimator.yaml'
 
@@ -96,14 +96,15 @@ def generate_launch_description():
             LaunchConfiguration('params_file'),
             LaunchConfiguration('uav_params_file'),
             LaunchConfiguration('ekf_params_file'),
-            {'use_sim_time': LaunchConfiguration('use_sim_time')}
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+            {'uav_name': uav_name}
         ],
         remappings=[
             ('odometry_in', 'px4_api/odometry'),
-            ('odometry_fast_lio_in', 'fast_lio/odometry'),
+            ('odometry_fast_lio_in', 'fast_lio/odometry_high_freq'),
             ('odometry_openvins_in', 'vins_republisher/odometry'),
-            ('imu_in', 'px4_api/imu'),
             ('control_in', 'control_manager/diagnostics'),
+            ('motor_speed_in', '/hw_api/motor_speed_estimated'),
             ('odometry_out', 'estimation_manager/estimation'),
             ('odometry_predict', 'estimation_manager/estimation_predict'),
             ('set_odometry', 'set_odometry'),

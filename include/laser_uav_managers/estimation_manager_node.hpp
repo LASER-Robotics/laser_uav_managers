@@ -10,6 +10,7 @@
 #include <laser_msgs/msg/estimation_manager_diagnostics.hpp>
 #include <laser_msgs/msg/sensor_status.hpp>
 #include <laser_msgs/srv/set_string.hpp>
+#include <laser_msgs/msg/motor_speed_stamped.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
 #include <Eigen/Dense>
 #include <mutex>
@@ -19,7 +20,14 @@
 #include <map>
 #include <deque>
 #include <chrono>
-#include <laser_uav_estimators/state_estimator.hpp>
+#include <laser_uav_estimators/mekf_state_estimator.hpp>
+
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>  // Importante para o toMsg
+#include <tf2/LinearMath/Transform.h>
+
 /*//}*/
 
 /* define //{*/
@@ -76,7 +84,7 @@ private:
 
   void odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
-  void imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg);
+  void motorSpeedCallback(const laser_msgs::msg::MotorSpeedStamped::SharedPtr msg);
 
   void controlCallback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg);
 
@@ -108,7 +116,7 @@ private:
   /*//}*/
 
   /* EKF //{ */
-  std::unique_ptr<laser_uav_estimators::StateEstimator> ekf_;
+  std::unique_ptr<laser_uav_estimators::MEKFEstimator> mekf_;
   /*//}*/
 
   /* ROS COMMUNICATIONS //{ */
@@ -119,7 +127,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_px4_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_openvins_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_fast_lio_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr                  imu_sub_;
+  rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::SharedPtr     motor_sub_;
   rclcpp::Subscription<laser_msgs::msg::UavControlDiagnostics>::SharedPtr control_sub_;
   rclcpp::TimerBase::SharedPtr                                            timer_;
   rclcpp::TimerBase::SharedPtr                                            check_subscribers_timer_;
@@ -132,22 +140,23 @@ private:
   rclcpp::Time                          last_px4_odom_time_;
   rclcpp::Time                          last_openvins_odom_time_;
   rclcpp::Time                          last_fast_lio_odom_time_;
-  rclcpp::Time                          last_imu_time_;
+  rclcpp::Time                          last_motor_speed_time_;
   rclcpp::Time                          last_control_input_time_;
   std::chrono::steady_clock::time_point last_cpp_time_point_;
 
   SensorDataBuffer<nav_msgs::msg::Odometry>                px4_odom_data_;
   SensorDataBuffer<nav_msgs::msg::Odometry>                openvins_odom_data_;
   SensorDataBuffer<nav_msgs::msg::Odometry>                fast_lio_odom_data_;
-  SensorDataBuffer<sensor_msgs::msg::Imu>                  imu_data_;
+  SensorDataBuffer<laser_msgs::msg::MotorSpeedStamped>     motor_speed_data_;
   SensorDataBuffer<laser_msgs::msg::UavControlDiagnostics> control_data_;
 
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_px4_msg_;
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_openvins_msg_;
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_fast_lio_msg_;
-  sensor_msgs::msg::Imu::SharedPtr                  last_imu_msg_;
+  laser_msgs::msg::MotorSpeedStamped::SharedPtr     last_motor_speed_msg_;
   laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_msg_;
 
+  bool is_prediction{false};
   bool is_active_{false};
   bool is_ekf_active_{false};
   bool is_control_input_{false};
@@ -156,6 +165,10 @@ private:
   bool enable_px4_odom_{false};
   bool enable_openvins_odom_{false};
   bool enable_fast_lio_odom_{false};
+
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+  std::shared_ptr<tf2_ros::Buffer>               tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener>    tf_listener_;
 
   std::string              current_active_odometry_name_{"NONE"};
   std::vector<std::string> odometry_source_names_;
@@ -166,8 +179,10 @@ private:
   /*//}*/
 
   /* PARAMETERS //{ */
+  std::string         _uav_name_;
   double              frequency_;
   double              sensor_timeout_;
+  std::string         estimation_verbosity_;
   std::string         ekf_verbosity_;
   double              mass_;
   double              arm_length_;
@@ -177,8 +192,10 @@ private:
   Eigen::MatrixXd     allocation_matrix_;
   std::vector<double> process_noise_vec_;
 
-  laser_uav_estimators::ProcessNoiseGains     process_noise_gains_;
-  laser_uav_estimators::MeasurementNoiseGains measurement_noise_gains_;
+  laser_uav_estimators::NoiseGains            process_noise_gains_;
+  laser_uav_estimators::MeasurementNoiseGains px4_measurement_noise_gains_;
+  laser_uav_estimators::MeasurementNoiseGains openvins_measurement_noise_gains_;
+  laser_uav_estimators::MeasurementNoiseGains fast_lio_measurement_noise_gains_;
 
   double px4_odom_tolerance_;
   double px4_odom_timeout_;

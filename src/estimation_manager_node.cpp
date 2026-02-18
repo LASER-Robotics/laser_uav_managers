@@ -7,6 +7,7 @@ namespace laser_uav_managers
 EstimationManager::EstimationManager(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode("state_estimator", options) {
   RCLCPP_INFO(get_logger(), "Creating EstimationManager...");
 
+  declare_parameter("uav_name", "uav");
   declare_parameter("frequency", 100.0);
   declare_parameter("initial_odometry_source", "px4_api_odom");
   declare_parameter("odometry_source_names", std::vector<std::string>{});
@@ -15,34 +16,40 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions &options) : rclcp
   declare_parameter("odometry_switch_velocity_linear_threshold", 0.5);
   declare_parameter("odometry_switch_velocity_angular_threshold", 1.0);
   declare_parameter("sensor_timeout", 0.5);
+  declare_parameter("estimation_verbosity", "INFO");
   declare_parameter("ekf_verbosity", "INFO");
 
   declare_parameter("multirotor_parameters.mass", 1.0);
   declare_parameter("multirotor_parameters.inertia", std::vector<double>{0.01, 0.01, 0.01});
   declare_parameter("multirotor_parameters.G1", std::vector<double>{0.1, -0.1, -0.1, 0.1, 0.1, 0.1, -0.1, -0.1});
 
-  declare_parameter("process_noise_gains.position", 0.01);
+  declare_parameter("process_noise_gains.position_xy", 0.01);
+  declare_parameter("process_noise_gains.position_z", 0.01);
   declare_parameter("process_noise_gains.orientation", 0.01);
-  declare_parameter("process_noise_gains.linear_velocity", 0.1);
+  declare_parameter("process_noise_gains.linear_velocity_xy", 0.1);
+  declare_parameter("process_noise_gains.linear_velocity_z", 0.1);
   declare_parameter("process_noise_gains.angular_velocity", 0.1);
 
-  declare_parameter("measurement_noise_gains.px4_odometry.position", 1.0);
+  declare_parameter("measurement_noise_gains.px4_odometry.position_xy", 1.0);
+  declare_parameter("measurement_noise_gains.px4_odometry.position_z", 1.0);
   declare_parameter("measurement_noise_gains.px4_odometry.orientation", 1.0);
-  declare_parameter("measurement_noise_gains.px4_odometry.linear_velocity", 1.0);
+  declare_parameter("measurement_noise_gains.px4_odometry.linear_velocity_xy", 1.0);
+  declare_parameter("measurement_noise_gains.px4_odometry.linear_velocity_z", 1.0);
   declare_parameter("measurement_noise_gains.px4_odometry.angular_velocity", 1.0);
-  declare_parameter("measurement_noise_gains.openvins.position", 1.0);
+
+  declare_parameter("measurement_noise_gains.openvins.position_xy", 1.0);
+  declare_parameter("measurement_noise_gains.openvins.position_z", 1.0);
   declare_parameter("measurement_noise_gains.openvins.orientation", 1.0);
-  declare_parameter("measurement_noise_gains.openvins.linear_velocity", 1.0);
+  declare_parameter("measurement_noise_gains.openvins.linear_velocity_xy", 1.0);
+  declare_parameter("measurement_noise_gains.openvins.linear_velocity_z", 1.0);
   declare_parameter("measurement_noise_gains.openvins.angular_velocity", 1.0);
-  declare_parameter("measurement_noise_gains.fast_lio.position", 1.0);
+
+  declare_parameter("measurement_noise_gains.fast_lio.position_xy", 1.0);
+  declare_parameter("measurement_noise_gains.fast_lio.position_z", 1.0);
   declare_parameter("measurement_noise_gains.fast_lio.orientation", 1.0);
-  declare_parameter("measurement_noise_gains.fast_lio.linear_velocity", 1.0);
+  declare_parameter("measurement_noise_gains.fast_lio.linear_velocity_xy", 1.0);
+  declare_parameter("measurement_noise_gains.fast_lio.linear_velocity_z", 1.0);
   declare_parameter("measurement_noise_gains.fast_lio.angular_velocity", 1.0);
-  declare_parameter("measurement_noise_gains.imu.position", 1.0);
-  declare_parameter("measurement_noise_gains.imu.orientation", 1.0);
-  declare_parameter("measurement_noise_gains.imu.linear_velocity", 1.0);
-  declare_parameter("measurement_noise_gains.imu.angular_velocity", 1.0);
-  declare_parameter("measurement_noise_gains.gps.position", 1.0);
 
   declare_parameter("px4_odom_tolerance", 0.1);
   declare_parameter("px4_odom_timeout", 0.5);
@@ -53,11 +60,12 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions &options) : rclcp
   declare_parameter("fast_lio_odom_tolerance", 0.1);
   declare_parameter("fast_lio_odom_timeout", 0.5);
   declare_parameter("fast_lio_odom_covariance", 1.0);
-  declare_parameter("imu_tolerance", 0.1);
-  declare_parameter("imu_timeout", 0.5);
-  declare_parameter("imu_covariance", 1.0);
   declare_parameter("control_tolerance", 0.1);
   declare_parameter("control_timeout", 0.5);
+
+  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  tf_buffer_      = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_    = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   RCLCPP_INFO(get_logger(), "EstimationManager node initialized.");
 }
@@ -110,7 +118,6 @@ CallbackReturn EstimationManager::on_activate(const rclcpp_lifecycle::State &) {
   is_active_ = true;
   timer_->reset();
   diagnostics_timer_->reset();
-  ekf_->reset();
   return CallbackReturn::SUCCESS;
 }
 //}
@@ -131,16 +138,15 @@ CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State &)
 /* on_cleanup() //{ */
 CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State &) {
   RCLCPP_INFO(get_logger(), "Cleaning up EstimationManager...");
-  ekf_.reset();
   odom_pub_.reset();
   predict_pub_.reset();
   diagnostics_pub_.reset();
   odometry_px4_sub_.reset();
   odometry_fast_lio_sub_.reset();
   odometry_openvins_sub_.reset();
-  imu_sub_.reset();
   control_sub_.reset();
   timer_.reset();
+  motor_sub_.reset();
   diagnostics_timer_.reset();
 
   return CallbackReturn::SUCCESS;
@@ -157,6 +163,7 @@ CallbackReturn EstimationManager::on_shutdown(const rclcpp_lifecycle::State &) {
 /* getParameters() //{ */
 void EstimationManager::getParameters() {
   RCLCPP_INFO(get_logger(), "Loading parameters...");
+  get_parameter("uav_name", _uav_name_);
   get_parameter("frequency", frequency_);
   get_parameter("initial_odometry_source", current_active_odometry_name_);
   get_parameter("odometry_source_names", odometry_source_names_);
@@ -165,39 +172,48 @@ void EstimationManager::getParameters() {
   get_parameter("odometry_switch_velocity_linear_threshold", odometry_switch_velocity_linear_threshold_);
   get_parameter("odometry_switch_velocity_angular_threshold", odometry_switch_velocity_angular_threshold_);
   get_parameter("sensor_timeout", sensor_timeout_);
+  get_parameter("estimation_verbosity", estimation_verbosity_);
   get_parameter("ekf_verbosity", ekf_verbosity_);
 
-  set_verbosity(ekf_verbosity_);
+  set_verbosity(estimation_verbosity_);
 
   get_parameter("multirotor_parameters.mass", mass_);
   get_parameter("multirotor_parameters.inertia", inertia_vec_);
+  get_parameter("multirotor_parameters.c_thrust", thrust_coefficient_);
 
   std::vector<double> G1_vec;
   get_parameter("multirotor_parameters.G1", G1_vec);
   int num_cols       = G1_vec.size() / 4;
   allocation_matrix_ = Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(G1_vec.data(), 4, num_cols);
 
-  get_parameter("process_noise_gains.position", process_noise_gains_.position);
+  get_parameter("process_noise_gains.position_xy", process_noise_gains_.position_xy);
+  get_parameter("process_noise_gains.position_z", process_noise_gains_.position_z);
   get_parameter("process_noise_gains.orientation", process_noise_gains_.orientation);
-  get_parameter("process_noise_gains.linear_velocity", process_noise_gains_.linear_velocity);
-  get_parameter("process_noise_gains.angular_velocity", process_noise_gains_.angular_velocity);
-  get_parameter("measurement_noise_gains.px4_odometry.position", measurement_noise_gains_.px4_odometry.position);
-  get_parameter("measurement_noise_gains.px4_odometry.orientation", measurement_noise_gains_.px4_odometry.orientation);
-  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity", measurement_noise_gains_.px4_odometry.linear_velocity);
-  get_parameter("measurement_noise_gains.px4_odometry.angular_velocity", measurement_noise_gains_.px4_odometry.angular_velocity);
-  get_parameter("measurement_noise_gains.openvins.position", measurement_noise_gains_.openvins.position);
-  get_parameter("measurement_noise_gains.openvins.orientation", measurement_noise_gains_.openvins.orientation);
-  get_parameter("measurement_noise_gains.openvins.linear_velocity", measurement_noise_gains_.openvins.linear_velocity);
-  get_parameter("measurement_noise_gains.openvins.angular_velocity", measurement_noise_gains_.openvins.angular_velocity);
-  get_parameter("measurement_noise_gains.fast_lio.position", measurement_noise_gains_.fast_lio.position);
-  get_parameter("measurement_noise_gains.fast_lio.orientation", measurement_noise_gains_.fast_lio.orientation);
-  get_parameter("measurement_noise_gains.fast_lio.linear_velocity", measurement_noise_gains_.fast_lio.linear_velocity);
-  get_parameter("measurement_noise_gains.fast_lio.angular_velocity", measurement_noise_gains_.fast_lio.angular_velocity);
-  get_parameter("measurement_noise_gains.imu.position", measurement_noise_gains_.imu.position);
-  get_parameter("measurement_noise_gains.imu.orientation", measurement_noise_gains_.imu.orientation);
-  get_parameter("measurement_noise_gains.imu.linear_velocity", measurement_noise_gains_.imu.linear_velocity);
-  get_parameter("measurement_noise_gains.imu.angular_velocity", measurement_noise_gains_.imu.angular_velocity);
-  get_parameter("measurement_noise_gains.gps.position", measurement_noise_gains_.gps.position);
+  get_parameter("process_noise_gains.linear_velocity_xy", process_noise_gains_.velocity_linear_xy);
+  get_parameter("process_noise_gains.linear_velocity_z", process_noise_gains_.velocity_linear_z);
+  get_parameter("process_noise_gains.angular_velocity", process_noise_gains_.velocity_angular);
+
+  get_parameter("measurement_noise_gains.px4_odometry.position_xy", px4_measurement_noise_gains_.odometry.position_xy);
+  get_parameter("measurement_noise_gains.px4_odometry.position_z", px4_measurement_noise_gains_.odometry.position_z);
+  get_parameter("measurement_noise_gains.px4_odometry.orientation", px4_measurement_noise_gains_.odometry.orientation);
+  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity_xy", px4_measurement_noise_gains_.odometry.velocity_linear_xy);
+  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity", px4_measurement_noise_gains_.odometry.velocity_linear_z);
+  get_parameter("measurement_noise_gains.px4_odometry.angular_velocity", px4_measurement_noise_gains_.odometry.velocity_angular);
+
+  get_parameter("measurement_noise_gains.openvins.position_xy", openvins_measurement_noise_gains_.odometry.position_xy);
+  get_parameter("measurement_noise_gains.openvins.position_z", openvins_measurement_noise_gains_.odometry.position_z);
+  get_parameter("measurement_noise_gains.openvins.orientation", openvins_measurement_noise_gains_.odometry.orientation);
+  get_parameter("measurement_noise_gains.openvins.linear_velocity_xy", openvins_measurement_noise_gains_.odometry.velocity_linear_xy);
+  get_parameter("measurement_noise_gains.openvins.linear_velocity_z", openvins_measurement_noise_gains_.odometry.velocity_linear_z);
+  get_parameter("measurement_noise_gains.openvins.angular_velocity", openvins_measurement_noise_gains_.odometry.velocity_angular);
+
+
+  get_parameter("measurement_noise_gains.fast_lio.position_xy", fast_lio_measurement_noise_gains_.odometry.position_xy);
+  get_parameter("measurement_noise_gains.fast_lio.position_z", fast_lio_measurement_noise_gains_.odometry.position_z);
+  get_parameter("measurement_noise_gains.fast_lio.orientation", fast_lio_measurement_noise_gains_.odometry.orientation);
+  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_xy", fast_lio_measurement_noise_gains_.odometry.velocity_linear_xy);
+  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_z", fast_lio_measurement_noise_gains_.odometry.velocity_linear_z);
+  get_parameter("measurement_noise_gains.fast_lio.angular_velocity", fast_lio_measurement_noise_gains_.odometry.velocity_angular);
 
   double tolerance, timeout;
 
@@ -218,12 +234,6 @@ void EstimationManager::getParameters() {
   get_parameter("fast_lio_odom_covariance", fast_lio_odom_covariance_);
   fast_lio_odom_data_.tolerance = rclcpp::Duration::from_seconds(tolerance);
   fast_lio_odom_data_.timeout   = rclcpp::Duration::from_seconds(timeout);
-
-  get_parameter("imu_tolerance", tolerance);
-  get_parameter("imu_timeout", timeout);
-  get_parameter("imu_covariance", imu_covariance_);
-  imu_data_.tolerance = rclcpp::Duration::from_seconds(tolerance);
-  imu_data_.timeout   = rclcpp::Duration::from_seconds(timeout);
 
   get_parameter("control_tolerance", tolerance);
   get_parameter("control_timeout", timeout);
@@ -247,9 +257,10 @@ void EstimationManager::configPubSub() {
                                                                         std::bind(&EstimationManager::odometryFastLioCallback, this, std::placeholders::_1));
   odometry_openvins_sub_ = create_subscription<nav_msgs::msg::Odometry>("odometry_openvins_in", 10,
                                                                         std::bind(&EstimationManager::odometryOpenVinsCallback, this, std::placeholders::_1));
-  imu_sub_               = create_subscription<sensor_msgs::msg::Imu>("imu_in", 10, std::bind(&EstimationManager::imuCallback, this, std::placeholders::_1));
   control_sub_           = create_subscription<laser_msgs::msg::UavControlDiagnostics>("control_in", 10,
                                                                              std::bind(&EstimationManager::controlCallback, this, std::placeholders::_1));
+  motor_sub_             = create_subscription<laser_msgs::msg::MotorSpeedStamped>("motor_speed_in", 10,
+                                                                       std::bind(&EstimationManager::motorSpeedCallback, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "Publishers and subscribers configured.");
 }
@@ -278,43 +289,48 @@ void EstimationManager::setupEKF() {
   RCLCPP_INFO(get_logger(), "Configuring EKF...");
   Eigen::Matrix3d inertia = Eigen::Vector3d(inertia_vec_[0], inertia_vec_[1], inertia_vec_[2]).asDiagonal();
 
-  ekf_ = std::make_unique<laser_uav_estimators::StateEstimator>(mass_, allocation_matrix_, inertia, ekf_verbosity_);
-
-
-  RCLCPP_INFO(get_logger(), "Applying noise gains to EKF.");
-  ekf_->set_process_noise_gains(process_noise_gains_);
-  ekf_->set_measurement_noise_gains(measurement_noise_gains_);
 
   if (current_active_odometry_name_ == "px4_api_odom") {
+    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, px4_measurement_noise_gains_, process_noise_gains_,
+                                                                  ekf_verbosity_);
     enable_px4_odom_      = true;
     enable_openvins_odom_ = false;
     enable_fast_lio_odom_ = false;
+    RCLCPP_INFO(get_logger(), "Initial odometry source set to \'px4_api_odom\'.");
   } else if (current_active_odometry_name_ == "openvins_odom") {
+    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, openvins_measurement_noise_gains_, process_noise_gains_,
+                                                                  ekf_verbosity_);
     enable_px4_odom_      = false;
     enable_openvins_odom_ = true;
     enable_fast_lio_odom_ = false;
+    RCLCPP_INFO(get_logger(), "Initial odometry source set to \'openvins_odom\'.");
   } else if (current_active_odometry_name_ == "fast_lio_odom") {
+    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, fast_lio_measurement_noise_gains_, process_noise_gains_,
+                                                                  ekf_verbosity_);
     enable_px4_odom_      = false;
     enable_openvins_odom_ = false;
     enable_fast_lio_odom_ = true;
+    RCLCPP_INFO(get_logger(), "Initial odometry source set to \'fast_lio_odom\'.");
   } else {
-    RCLCPP_WARN(get_logger(), "Invalid initial odometry source. Using 'px4_api_odom' as default.");
     current_active_odometry_name_ = "px4_api_odom";
-    enable_px4_odom_              = true;
-    enable_openvins_odom_         = false;
-    enable_fast_lio_odom_         = false;
+    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, px4_measurement_noise_gains_, process_noise_gains_,
+                                                                  ekf_verbosity_);
+    enable_px4_odom_      = true;
+    enable_openvins_odom_ = false;
+    enable_fast_lio_odom_ = false;
+    RCLCPP_WARN(get_logger(), "Invalid initial odometry source. Using 'px4_api_odom' as default.");
   }
 
   RCLCPP_INFO(get_logger(), "EKF configured.");
 }
-//}
 
 /* odometryPx4Callback() //{ */
 void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(px4_odom_data_.mtx);
   px4_odom_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(
-      get_logger(), "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+  RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 10000, "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz",
+      static_cast<double>(msg->header.stamp.sec) + static_cast<double>(msg->header.stamp.nanosec) * 1e-9,
       ((px4_odom_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(px4_odom_data_.last_msg->header.stamp)).seconds()) : 0.0));
   px4_odom_data_.last_msg = msg;
 }
@@ -326,10 +342,11 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
   openvins_odom_data_.buffer[msg->header.stamp] = msg;
   if (enable_openvins_odom_)
     odom_pub_->publish(*msg);
-  RCLCPP_DEBUG(get_logger(), "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-               ((openvins_odom_data_.last_msg != nullptr)
-                    ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(openvins_odom_data_.last_msg->header.stamp)).seconds())
-                    : 0.0));
+  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz",
+                        msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+                        ((openvins_odom_data_.last_msg != nullptr)
+                             ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(openvins_odom_data_.last_msg->header.stamp)).seconds())
+                             : 0.0));
   openvins_odom_data_.last_msg = msg;
 }
 //}
@@ -338,21 +355,12 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
 void EstimationManager::odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(fast_lio_odom_data_.mtx);
   fast_lio_odom_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(get_logger(), "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-               ((fast_lio_odom_data_.last_msg != nullptr)
-                    ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
-                    : 0.0));
+  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz",
+                        msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+                        ((fast_lio_odom_data_.last_msg != nullptr)
+                             ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
+                             : 0.0));
   fast_lio_odom_data_.last_msg = msg;
-}
-//}
-
-/* imuCallback() //{ */
-void EstimationManager::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
-  std::lock_guard<std::mutex> lock(imu_data_.mtx);
-  imu_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(get_logger(), "Received IMU message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
-               ((imu_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(imu_data_.last_msg->header.stamp)).seconds()) : 0.0));
-  imu_data_.last_msg = msg;
 }
 //}
 
@@ -360,10 +368,42 @@ void EstimationManager::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) 
 void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(control_data_.mtx);
   control_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG(
-      get_logger(), "Received control message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+  RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 10000, "Received control message at time %.3f s, frequency: %.2f Hz",
+      msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
       ((control_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp)).seconds()) : 0.0));
   control_data_.last_msg = msg;
+}
+//}
+
+/* motorSpeedCallback() //{ */
+void EstimationManager::motorSpeedCallback(const laser_msgs::msg::MotorSpeedStamped::SharedPtr msg) {
+  std::lock_guard<std::mutex> lock(motor_speed_data_.mtx);
+  motor_speed_data_.buffer[msg->header.stamp] = msg;
+  // RCLCPP_DEBUG_THROTTLE(
+  //    get_logger(), *get_clock(), 10000, "Received motor speed message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec
+  //    * 1e-9,
+  //     ((motor_speed_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(motor_speed_data_.last_msg->header.stamp)).seconds())
+  //                                              : 0.0));
+
+  // std::cout << "Motor speeds (RPM): ";
+  // for (const auto &speed : msg->data.data) {
+  //   std::cout << speed << " ";
+  // }
+  // std::cout << std::endl;
+
+  for (size_t i = 0; i < msg->data.data.size(); i++) {
+    msg->data.data[i] = (msg->data.data[i] * msg->data.data[i]) * thrust_coefficient_;
+  }
+  // std::cout << "Coeficient Thrust: " << thrust_coefficient_ << std::endl;
+
+  // std::cout << "Motor thrusts (N): ";
+  // for (const auto &thrust : msg->data.data) {
+  //   std::cout << thrust << " ";
+  // }
+  // std::cout << std::endl;
+
+  motor_speed_data_.last_msg = msg;
 }
 //}
 
@@ -419,29 +459,27 @@ void EstimationManager::setOdometryCallback(const std::shared_ptr<laser_msgs::sr
     return;
   }
 
-  const auto &current_state = ekf_->get_state();
-  const auto &new_odom_pose = newest_msg_it->second->pose.pose;
+  const nav_msgs::msg::Odometry &current_state = mekf_->get_odometry();
+  const auto                    &new_odom_pose = newest_msg_it->second->pose.pose;
 
-  Eigen::Vector3d current_position(current_state(laser_uav_estimators::State::PX), current_state(laser_uav_estimators::State::PY),
-                                   current_state(laser_uav_estimators::State::PZ));
+  Eigen::Vector3d current_position(current_state.pose.pose.position.x, current_state.pose.pose.position.y, current_state.pose.pose.position.z);
   Eigen::Vector3d new_odom_position(new_odom_pose.position.x, new_odom_pose.position.y, new_odom_pose.position.z);
   double          distance = (current_position - new_odom_position).norm();
 
   Eigen::Quaterniond new_orientation(new_odom_pose.orientation.w, new_odom_pose.orientation.x, new_odom_pose.orientation.y, new_odom_pose.orientation.z);
-  Eigen::Quaterniond current_orientation(current_state(laser_uav_estimators::State::QW), current_state(laser_uav_estimators::State::QX),
-                                         current_state(laser_uav_estimators::State::QY), current_state(laser_uav_estimators::State::QZ));
-  Eigen::AngleAxisd  angle_axis_diff(new_orientation * current_orientation.inverse());
+  Eigen::Quaterniond current_orientation(current_state.pose.pose.orientation.w, current_state.pose.pose.orientation.x, current_state.pose.pose.orientation.y,
+                                         current_state.pose.pose.orientation.z);
+
+  Eigen::AngleAxisd angle_axis_diff(new_orientation * current_orientation.inverse());
 
   Eigen::Vector3d new_odom_linear_velocity(newest_msg_it->second->twist.twist.linear.x, newest_msg_it->second->twist.twist.linear.y,
                                            newest_msg_it->second->twist.twist.linear.z);
-  Eigen::Vector3d current_linear_velocity(current_state(laser_uav_estimators::State::VX), current_state(laser_uav_estimators::State::VY),
-                                          current_state(laser_uav_estimators::State::VZ));
+  Eigen::Vector3d current_linear_velocity(current_state.twist.twist.linear.x, current_state.twist.twist.linear.y, current_state.twist.twist.linear.z);
   double          velocity_diff = (current_linear_velocity - new_odom_linear_velocity).norm();
 
   Eigen::Vector3d new_odom_angular_velocity(newest_msg_it->second->twist.twist.angular.x, newest_msg_it->second->twist.twist.angular.y,
                                             newest_msg_it->second->twist.twist.angular.z);
-  Eigen::Vector3d current_angular_velocity(current_state(laser_uav_estimators::State::WX), current_state(laser_uav_estimators::State::WY),
-                                           current_state(laser_uav_estimators::State::WZ));
+  Eigen::Vector3d current_angular_velocity(current_state.twist.twist.angular.x, current_state.twist.twist.angular.y, current_state.twist.twist.angular.z);
   double          angular_velocity_diff = (current_angular_velocity - new_odom_angular_velocity).norm();
 
   if ((distance > odometry_switch_distance_threshold_) || (angle_axis_diff.angle() > odometry_switch_angle_threshold_) ||
@@ -465,6 +503,15 @@ void EstimationManager::setOdometryCallback(const std::shared_ptr<laser_msgs::sr
   enable_openvins_odom_         = (new_source == "openvins_odom");
   enable_fast_lio_odom_         = (new_source == "fast_lio_odom");
   current_active_odometry_name_ = new_source;
+
+  if (new_source == "px4_api_odom") {
+    mekf_->set_measurement_noise_gains(px4_measurement_noise_gains_);
+  } else if (new_source == "openvins_odom") {
+    mekf_->set_measurement_noise_gains(openvins_measurement_noise_gains_);
+  } else if (new_source == "fast_lio_odom") {
+    mekf_->set_measurement_noise_gains(fast_lio_measurement_noise_gains_);
+  }
+
 
   response->success = true;
   response->message = "Odometry source switched to: " + current_active_odometry_name_;
@@ -506,8 +553,8 @@ std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time
     std::optional<MsgT> msg_copy = *best_match_it->second;
     sensor_data.is_active        = true;
     sensor_data.buffer.erase(best_match_it);
-    RCLCPP_DEBUG(get_logger(), "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(), min_diff.seconds() * 1000.0,
-                 sensor_data.tolerance.seconds() * 1000.0);
+    RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(),
+                          min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
     return msg_copy;
   }
 
@@ -529,8 +576,8 @@ void EstimationManager::pruneSensorBuffer(const rclcpp::Time &now, SensorDataBuf
 
   auto first_to_keep_it = sensor_data.buffer.upper_bound(cutoff_time);
 
-  RCLCPP_DEBUG(
-      get_logger(), "[%s] Pruning sensor buffer. %s, first kept time: %.2f s", sensor_name.c_str(),
+  RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 10000, "[%s] Pruning sensor buffer. %s, first kept time: %.2f s", sensor_name.c_str(),
       (first_to_keep_it != sensor_data.buffer.begin() ? "Removing old messages." : "No messages to remove."),
       (first_to_keep_it != sensor_data.buffer.begin() && first_to_keep_it != sensor_data.buffer.end()) ? rclcpp::Time(first_to_keep_it->first).seconds() : 0.0);
   sensor_data.buffer.erase(sensor_data.buffer.begin(), first_to_keep_it);
@@ -548,73 +595,73 @@ void EstimationManager::timerCallback() {
       return;
     }
 
-    rclcpp::Time reference_time = this->get_clock()->now();
+    rclcpp::Time reference_time;
+
+    if (control_data_.buffer.empty()) {
+      reference_time = this->get_clock()->now();
+    } else {
+      reference_time = control_data_.buffer.rbegin()->first;
+      if ((this->get_clock()->now() - reference_time) > control_data_.timeout) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Control input timeout detected. Last control message received %.2f s ago.",
+                             (this->get_clock()->now() - reference_time).seconds());
+        reference_time = this->get_clock()->now();
+      }
+    }
+
 
     auto px4_odom_msg      = getSynchronizedMessage(reference_time, px4_odom_data_, "PX4_ODOMETRY");
     auto openvins_odom_msg = getSynchronizedMessage(reference_time, openvins_odom_data_, "OPENVINS_ODOMETRY");
     auto fast_lio_odom_msg = getSynchronizedMessage(reference_time, fast_lio_odom_data_, "FAST_LIO_ODOMETRY");
-    auto imu_msg           = getSynchronizedMessage(reference_time, imu_data_, "IMU");
     auto control_msg       = getSynchronizedMessage(reference_time, control_data_, "CONTROL");
 
-    RCLCPP_DEBUG(get_logger(), "Synchronized Messages - PX4 Odom: %s, OpenVINS Odom: %s, FastLIO Odom: %s, IMU: %s, Control: %s", px4_odom_msg ? "YES" : "NO",
-                 openvins_odom_msg ? "YES" : "NO", fast_lio_odom_msg ? "YES" : "NO", imu_msg ? "YES" : "NO", control_msg ? "YES" : "NO");
-    RCLCPP_DEBUG(get_logger(), "Buffer Sizes - PX4 Odom: %zu, OpenVINS Odom: %zu, FastLIO Odom: %zu, IMU: %zu, Control: %zu", px4_odom_data_.buffer.size(),
-                 openvins_odom_data_.buffer.size(), fast_lio_odom_data_.buffer.size(), imu_data_.buffer.size(), control_data_.buffer.size());
+    RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Synchronized Messages - PX4 Odom: %s, OpenVINS Odom: %s, FastLIO Odom: %s, Control: %s",
+                          px4_odom_msg ? "YES" : "NO", openvins_odom_msg ? "YES" : "NO", fast_lio_odom_msg ? "YES" : "NO", control_msg ? "YES" : "NO");
+    RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Buffer Sizes - PX4 Odom: %zu, OpenVINS Odom: %zu, FastLIO Odom: %zu, Control: %zu",
+                          px4_odom_data_.buffer.size(), openvins_odom_data_.buffer.size(), fast_lio_odom_data_.buffer.size(), control_data_.buffer.size());
 
     pruneSensorBuffer(reference_time, px4_odom_data_, "PX4_ODOMETRY");
     pruneSensorBuffer(reference_time, openvins_odom_data_, "OPENVINS_ODOMETRY");
     pruneSensorBuffer(reference_time, fast_lio_odom_data_, "FAST_LIO_ODOMETRY");
-    pruneSensorBuffer(reference_time, imu_data_, "IMU");
     pruneSensorBuffer(reference_time, control_data_, "CONTROL");
 
     bool         has_prediction{false};
     const double MAX_CONTROL_VALUE = 1.0e2;
 
-    if (enable_px4_odom_ && !px4_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_px4_odom_ && !px4_odom_data_.is_active) {
       if (!px4_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
-      if (!imu_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
         return;
       }
     } else {
       if (enable_px4_odom_) {
-        RCLCPP_INFO_ONCE(get_logger(), "PX4 odometry input is active, IMU input is active, or PX4 odometry is enabled.");
+        RCLCPP_INFO_ONCE(get_logger(), "PX4 odometry input is active and enabled.");
       }
     }
 
-    if (enable_fast_lio_odom_ && !px4_odom_data_.is_active && !fast_lio_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_fast_lio_odom_ && !fast_lio_odom_data_.is_active) {
       if (!fast_lio_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Fast-LIO odometry input is inactive.");
-      if (!px4_odom_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
-      if (!imu_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
         return;
       }
     } else {
       if (enable_fast_lio_odom_) {
-        RCLCPP_INFO_ONCE(get_logger(),
-                         "Fast-LIO odometry input is active, PX4 odometry input is active, IMU input is active, or Fast-LIO odometry is enabled.");
+        RCLCPP_INFO_ONCE(get_logger(), "Fast-LIO odometry input is active and enabled.");
       }
     }
 
-    if (enable_openvins_odom_ && !openvins_odom_data_.is_active && !imu_data_.is_active) {
+    if (enable_openvins_odom_ && !openvins_odom_data_.is_active) {
       if (!openvins_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "OpenVINS odometry input is inactive.");
-      if (!imu_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "IMU input is inactive.");
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
-        return;
       }
     } else {
       if (enable_openvins_odom_) {
-        RCLCPP_INFO_ONCE(get_logger(), "OpenVINS odometry input is active, IMU input is active, or OpenVINS odometry is enabled.");
+        RCLCPP_INFO_ONCE(get_logger(), "OpenVINS odometry input is active and enabled.");
       }
     }
 
@@ -624,20 +671,23 @@ void EstimationManager::timerCallback() {
       if (!is_first_control_msg) {
         last_control_input_time_ = rclcpp::Time(control_msg->header.stamp);
         is_first_control_msg     = true;
+        return;
       } else {
         rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
         double       dt_sec       = (current_time - last_control_input_time_).seconds();
         last_control_input_time_  = current_time;
 
         bool can_predict = true;
-
         if (dt_sec < 0 || dt_sec > 1.0) {
           can_predict = false;
         }
 
-        if (can_predict && control_msg->last_control_input.data.size() != 4) {
-          can_predict = false;
+
+        if (can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
+          control_msg->last_control_input.data.resize(allocation_matrix_.cols());
+          RCLCPP_ERROR(get_logger(), "Control input size does not match number of motors (%d). Resizing input vector.", allocation_matrix_.cols());
         }
+
 
         if (can_predict) {
           Eigen::Map<const Eigen::Vector4d> control_input(control_msg->last_control_input.data.data());
@@ -656,100 +706,55 @@ void EstimationManager::timerCallback() {
           }
 
           if (can_predict) {
-            ekf_->predict(control_input, dt_sec);
+            mekf_->predict(control_input, dt_sec);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
             publishOdometry(predict_pub_, stamp);
             has_prediction = true;
+            is_prediction  = true;
           }
         }
       }
     }
 
-    laser_uav_estimators::MeasurementPackage pkg;
-    bool                                     has_measurement{false};
+
+    bool has_measurement{false};
+
     if (px4_odom_msg && enable_px4_odom_) {
-      const auto                                   &px4_odom = *px4_odom_msg;
-      Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_pose_cov(px4_odom.pose.covariance.data());
-      Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_twist_cov(px4_odom.twist.covariance.data());
-
-      pkg.px4_odometry  = *px4_odom_msg;
-      last_update_time_ = px4_odom_msg->header.stamp;
-      has_measurement   = true;
+      has_measurement = true;
+      mekf_->correct(*px4_odom_msg);
+      last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
     } else if (openvins_odom_msg && enable_openvins_odom_) {
-      const auto                                   &openvins_odom = *openvins_odom_msg;
-      Eigen::Map<const Eigen::Matrix<double, 6, 6>> openvins_pose_cov(openvins_odom.pose.covariance.data());
-      Eigen::Map<const Eigen::Matrix<double, 6, 6>> openvins_twist_cov(openvins_odom.twist.covariance.data());
-
-      pkg.openvins      = *openvins_odom_msg;
-      last_update_time_ = openvins_odom_msg->header.stamp;
-      has_measurement   = true;
-    } else if ((px4_odom_msg || fast_lio_odom_msg) && enable_fast_lio_odom_) {
-      if (px4_odom_msg) {
-        auto                                         &px4_odom = *px4_odom_msg;
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_pose_cov(px4_odom.pose.covariance.data());
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> px4_twist_cov(px4_odom.twist.covariance.data());
-
-        px4_odom.pose.pose.position.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.position.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.position.z = std::numeric_limits<double>::quiet_NaN();
-
-        px4_odom.pose.pose.orientation.x = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.y = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.z = std::numeric_limits<double>::quiet_NaN();
-        px4_odom.pose.pose.orientation.w = std::numeric_limits<double>::quiet_NaN();
-
-        pkg.px4_odometry = px4_odom;
-        has_measurement  = true;
-      }
-      if (fast_lio_odom_msg) {
-        auto &fast_lio_odom = *fast_lio_odom_msg;
-
-        fast_lio_odom.twist.twist.angular.x = std::numeric_limits<double>::quiet_NaN();
-        fast_lio_odom.twist.twist.angular.y = std::numeric_limits<double>::quiet_NaN();
-        fast_lio_odom.twist.twist.angular.z = std::numeric_limits<double>::quiet_NaN();
-
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_pose_cov(fast_lio_odom.pose.covariance.data());
-        Eigen::Map<const Eigen::Matrix<double, 6, 6>> fast_lio_twist_cov(fast_lio_odom.twist.covariance.data());
-        pkg.fast_lio      = fast_lio_odom;
-        last_update_time_ = fast_lio_odom.header.stamp;
-        has_measurement   = true;
-      }
+      has_measurement = true;
+      mekf_->correct(*openvins_odom_msg);
+      last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
+    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+      has_measurement = true;
+      mekf_->correct(*fast_lio_odom_msg);
+      last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
     }
 
-    bool has_measurement_imu{false};
-    if (imu_msg) {
-      if (last_imu_msg_) {
-        pkg.dt = (rclcpp::Time(imu_msg->header.stamp) - rclcpp::Time(last_imu_msg_->header.stamp)).seconds();
 
-        imu_msg->orientation.x = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->orientation.y = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->orientation.z = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->orientation.w = std::numeric_limits<double>::quiet_NaN();
+    // Correção do ternário: condição ? valor_se_true : valor_se_false
+    std::cout << "Openvins Enabled: " << (enable_openvins_odom_ ? "true" : "false") << std::endl;
 
-        imu_msg->linear_acceleration.x = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->linear_acceleration.y = std::numeric_limits<double>::quiet_NaN();
-        imu_msg->linear_acceleration.z = std::numeric_limits<double>::quiet_NaN();
-
-        pkg.imu             = imu_msg;
-        has_measurement_imu = true;
-      }
-      last_imu_msg_ = std::make_shared<sensor_msgs::msg::Imu>(*imu_msg);
-    }
-
-    if (has_measurement || has_measurement_imu)
-      ekf_->correct(pkg);
+    // Para o ponteiro, é melhor checar se ele é diferente de nulo de forma clara
+    std::cout << "Openvins Has Last Msg: " << (openvins_odom_data_.last_msg ? "YES" : "NO") << std::endl;
+    std::cout << "px4_api Has Last Msg: " << (px4_odom_data_.last_msg ? "YES" : "NO") << std::endl;
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
+      // Caso padrão: EKF ativo e OpenVins desligado
       publishOdometry(odom_pub_, last_update_time_);
       is_ekf_active_ = true;
     } else if (enable_openvins_odom_ && !openvins_odom_data_.last_msg) {
-      auto msg          = std::make_shared<nav_msgs::msg::Odometry>();
-      msg->header.stamp = this->get_clock()->now();
-
+      // OpenVins habilitado, mas ainda sem dados.
+      // Tentamos fazer o "fallback" para o PX4 para não deixar o drone sem odometria.
       if (px4_odom_data_.last_msg) {
-        msg = px4_odom_data_.last_msg;
+        auto msg = px4_odom_data_.last_msg;
+        // Opcional: Atualizar o timestamp para o agora para evitar TF antiga
+        msg->header.stamp = this->get_clock()->now();
+        odom_pub_->publish(*msg);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "OpenVins waiting for data... using PX4 fallback.");
       }
-      odom_pub_->publish(*msg);
     }
   }
   catch (const std::exception &e) {
@@ -815,7 +820,6 @@ void EstimationManager::diagnosticsTimerCallback() {
     fill_sensor_status(diag_msg->odometry_sources.emplace_back(), px4_odom_data_, "px4_api_odom");
     fill_sensor_status(diag_msg->odometry_sources.emplace_back(), openvins_odom_data_, "openvins_odom");
     fill_sensor_status(diag_msg->odometry_sources.emplace_back(), fast_lio_odom_data_, "fast_lio_odom");
-    fill_sensor_status(diag_msg->imu_status, imu_data_, "imu");
 
     diagnostics_pub_->publish(std::move(diag_msg));
   }
@@ -825,55 +829,42 @@ void EstimationManager::diagnosticsTimerCallback() {
 }
 //}
 
-/* publishOdometry() //{ */
 void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time) {
-  const auto &state = ekf_->get_state();
-  const auto &cov   = ekf_->get_covariance();
+  const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
-  if (state.size() < 13 || cov.rows() < 13 || cov.cols() < 13) {
-    RCLCPP_ERROR(get_logger(), "EKF state or covariance has incorrect size.");
-    return;
-  }
-  if (state.hasNaN() || cov.hasNaN()) {
-    RCLCPP_ERROR(get_logger(), "State or covariance contains NaN.");
-    rclcpp::shutdown();
-    return;
-  }
-
-  nav_msgs::msg::Odometry odom_out_msg;
-  odom_out_msg.header.stamp = pub_time;
-  if (current_active_odometry_name_ == "px4_api_odom" && px4_odom_data_.is_active && !px4_odom_data_.buffer.empty())
-    odom_out_msg.header.frame_id = px4_odom_data_.buffer.begin()->second->header.frame_id;
-  else if (current_active_odometry_name_ == "openvins_odom" && openvins_odom_data_.is_active && !openvins_odom_data_.buffer.empty())
-    odom_out_msg.header.frame_id = openvins_odom_data_.buffer.begin()->second->header.frame_id;
-  else if (current_active_odometry_name_ == "fast_lio_odom" && fast_lio_odom_data_.is_active && !fast_lio_odom_data_.buffer.empty())
-    odom_out_msg.header.frame_id = fast_lio_odom_data_.buffer.begin()->second->header.frame_id;
-
-  odom_out_msg.pose.pose.position.x    = state(laser_uav_estimators::State::PX);
-  odom_out_msg.pose.pose.position.y    = state(laser_uav_estimators::State::PY);
-  odom_out_msg.pose.pose.position.z    = state(laser_uav_estimators::State::PZ);
-  odom_out_msg.pose.pose.orientation.w = state(laser_uav_estimators::State::QW);
-  odom_out_msg.pose.pose.orientation.x = state(laser_uav_estimators::State::QX);
-  odom_out_msg.pose.pose.orientation.y = state(laser_uav_estimators::State::QY);
-  odom_out_msg.pose.pose.orientation.z = state(laser_uav_estimators::State::QZ);
-
-  odom_out_msg.twist.twist.linear.x  = state(laser_uav_estimators::State::VX);
-  odom_out_msg.twist.twist.linear.y  = state(laser_uav_estimators::State::VY);
-  odom_out_msg.twist.twist.linear.z  = state(laser_uav_estimators::State::VZ);
-  odom_out_msg.twist.twist.angular.x = state(laser_uav_estimators::State::WX);
-  odom_out_msg.twist.twist.angular.y = state(laser_uav_estimators::State::WY);
-  odom_out_msg.twist.twist.angular.z = state(laser_uav_estimators::State::WZ);
-
-  for (int i = 0; i < 6; ++i) {
-    for (int j = 0; j < 6; ++j) {
-      odom_out_msg.pose.covariance[i * 6 + j]  = cov(i, j);
-      odom_out_msg.twist.covariance[i * 6 + j] = cov(i + 7, j + 7);
-    }
-  }
-
+  // 1. Criar a mensagem de Odometria (normal)
+  nav_msgs::msg::Odometry odom_out_msg = state;
+  odom_out_msg.header.stamp            = pub_time;
+  odom_out_msg.header.frame_id         = _uav_name_ + "/odometry";
+  odom_out_msg.child_frame_id          = _uav_name_ + "/fcu";
   pub->publish(odom_out_msg);
+
+  // 2. Lógica da Transformada (Seguindo o exemplo que funciona)
+  try {
+    // Busca a relação entre o sensor e o drone
+
+    Eigen::Quaterniond q_odom(state.pose.pose.orientation.w, state.pose.pose.orientation.x, state.pose.pose.orientation.y, state.pose.pose.orientation.z);
+
+    // Prepara a TF Direta
+    tf2::Transform tf_direta;
+    tf_direta.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
+    tf_direta.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
+
+    // 3. INVERSÃO (O "pulo do gato" do seu segundo código)
+    tf2::Transform tf_invertida = tf_direta.inverse();
+
+    geometry_msgs::msg::TransformStamped dynamic_tf;
+    dynamic_tf.header.stamp    = pub_time;
+    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";       // O pai vira o FCU
+    dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";  // O filho vira a Odometria
+    dynamic_tf.transform       = tf2::toMsg(tf_invertida);
+
+    tf_broadcaster_->sendTransform(dynamic_tf);
+  }
+  catch (const tf2::TransformException &ex) {
+    RCLCPP_WARN(this->get_logger(), "Falha na TF: %s", ex.what());
+  }
 }
-//}
 
 }  // namespace laser_uav_managers
 
