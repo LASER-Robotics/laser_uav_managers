@@ -332,6 +332,16 @@ void ControlManagerNode::configClasses() {
 }
 //}
 
+/* checkHeadingError() //{ */
+double ControlManagerNode::checkHeadingError() {
+  Eigen::Quaterniond q1(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                        odometry_.pose.pose.orientation.z);
+  Eigen::Quaterniond q2(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
+                        last_waypoint_.pose.orientation.z);
+  return abs(quaternionToHeading(q1) - quaternionToHeading(q2));
+}
+//}
+
 /* quaternionToHeading() //{ */
 double ControlManagerNode::quaternionToHeading(const Eigen::Quaterniond &q) {
   Eigen::Vector3d heading_vector = q * Eigen::Vector3d::UnitX();
@@ -471,6 +481,7 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
     desired_path_    = msg.waypoints;
     emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
+    diagnostics_.have_goal = true;
   } else {
     RCLCPP_WARN(this->get_logger(), "Trajectory not will executed, because the uav is not flying.");
   }
@@ -487,6 +498,7 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
     agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
     emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
+    diagnostics_.have_goal = true;
   } else {
     RCLCPP_WARN(this->get_logger(), "GOTO's Point not will executed, because the uav is not flying.");
   }
@@ -530,7 +542,8 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
 
     agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
 
-    land_done_ = false;
+    land_done_             = false;
+    diagnostics_.have_goal = true;
   }
 }
 //}
@@ -564,7 +577,8 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     agile_planner_.generateTrajectory(current_pose, land_waypoint, 0.2, true);
 
-    takeoff_done_ = false;
+    takeoff_done_          = false;
+    diagnostics_.have_goal = true;
   }
 }
 //}
@@ -687,12 +701,13 @@ void ControlManagerNode::tmrExternalLoopControl() {
   if (requested_land_) {
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2500, "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
     if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * 0.80) {
-      requested_land_      = false;
-      land_done_           = true;
-      diagnostics_.is_fly  = false;
-      land_rampdown_       = true;
-      land_start_rampdown_ = laser_uav_controllers::thrustToThrotle(_controller_quadrotor_params_.motor_curve_a, _controller_quadrotor_params_.motor_curve_b,
-                                                                    (_controller_quadrotor_params_.mass * GRAVITY) / _controller_quadrotor_params_.n_motors);
+      requested_land_        = false;
+      land_done_             = true;
+      diagnostics_.have_goal = false;
+      diagnostics_.is_fly    = false;
+      land_rampdown_         = true;
+      land_start_rampdown_   = laser_uav_controllers::thrustToThrotle(_controller_quadrotor_params_.motor_curve_a, _controller_quadrotor_params_.motor_curve_b,
+                                                                      (_controller_quadrotor_params_.mass * GRAVITY) / _controller_quadrotor_params_.n_motors);
       RCLCPP_INFO(this->get_logger(), "Landing Done!, Detected land with estimated mass: %.3f", estimated_mass_for_detect_landing_);
       RCLCPP_INFO(this->get_logger(), "Start Land Ramp Down!");
     } else if (agile_planner_.isHover()) {
@@ -708,7 +723,9 @@ void ControlManagerNode::tmrExternalLoopControl() {
     }
   }
 
-  diagnostics_.have_goal = !agile_planner_.isHover();
+  if (diagnostics_.have_goal) {
+    diagnostics_.have_goal = !agile_planner_.isHover() || (checkHeadingError() > 0.1);
+  }
 }
 //}
 
