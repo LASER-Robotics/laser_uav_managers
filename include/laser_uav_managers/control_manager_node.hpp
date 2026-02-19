@@ -66,6 +66,7 @@ private:
   void   configTimers();
   void   configServices();
   void   configClasses();
+  double checkHeadingError();
   double quaternionToHeading(const Eigen::Quaterniond &q);
   void   checkSafeArea();
 
