@@ -149,6 +149,10 @@ private:
   double _takeoff_height_;
   double _takeoff_speed_;
 
+  double _land_speed_;
+  double _land_threshold_detect_;
+  double _land_increment_rampdown_;
+
   double land_start_rampdown_;
 
   bool emergency_hover_{false};

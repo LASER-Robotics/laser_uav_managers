@@ -15,6 +15,10 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("takeoff.height", rclcpp::ParameterValue(0.0));
   declare_parameter("takeoff.speed", rclcpp::ParameterValue(0.0));
 
+  declare_parameter("land.speed", rclcpp::ParameterValue(0.2));
+  declare_parameter("land.threshold_detect", rclcpp::ParameterValue(0.8));
+  declare_parameter("land.increment_rampdown", rclcpp::ParameterValue(0.05));
+
   declare_parameter("filter_params.butterworth.gyro_a", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter("filter_params.butterworth.gyro_b", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
 
@@ -175,6 +179,10 @@ void ControlManagerNode::getParameters() {
 
   get_parameter("takeoff.height", _takeoff_height_);
   get_parameter("takeoff.speed", _takeoff_speed_);
+
+  get_parameter("land.speed", _land_speed_);
+  get_parameter("land.threshold_detect", _land_threshold_detect_);
+  get_parameter("land.increment_rampdown", _land_increment_rampdown_);
 
   get_parameter("filter_params.butterworth.gyro_a", aux);
   _gyro_a_ = aux.as_double_array();
@@ -575,7 +583,7 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
     q.normalize();
     land_waypoint.heading = quaternionToHeading(q);
 
-    agile_planner_.generateTrajectory(current_pose, land_waypoint, 0.2, true);
+    agile_planner_.generateTrajectory(current_pose, land_waypoint, _land_speed_, true);
 
     takeoff_done_          = false;
     diagnostics_.have_goal = true;
@@ -623,7 +631,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       lock_control_inputs_ = true;
     }
 
-    land_start_rampdown_ -= 0.1;
+    land_start_rampdown_ -= _land_increment_rampdown_;
 
     if (land_start_rampdown_ < 0.0) {
       land_start_rampdown_ = 0.0;
@@ -700,7 +708,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   if (requested_land_) {
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2500, "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
-    if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * 0.80) {
+    if (estimated_mass_for_detect_landing_ <= _controller_quadrotor_params_.mass * _land_threshold_detect_) {
       requested_land_        = false;
       land_done_             = true;
       diagnostics_.have_goal = false;
