@@ -66,6 +66,7 @@ private:
   void   configTimers();
   void   configServices();
   void   configClasses();
+  double checkHeadingError();
   double quaternionToHeading(const Eigen::Quaterniond &q);
   void   checkSafeArea();
 
@@ -76,7 +77,7 @@ private:
   void                                                        subImu(const sensor_msgs::msg::Imu &msg);
 
   rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::ConstSharedPtr sub_motor_speed_;
-  void                                                              subMotorSpeedStamped(const laser_msgs::msg::MotorSpeedStamped &msg);
+  void                                                                     subMotorSpeedStamped(const laser_msgs::msg::MotorSpeedStamped &msg);
 
   rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
   void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
@@ -148,6 +149,12 @@ private:
   double _takeoff_height_;
   double _takeoff_speed_;
 
+  double _land_speed_;
+  double _land_threshold_detect_;
+  double _land_increment_rampdown_;
+
+  double land_start_rampdown_;
+
   bool emergency_hover_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
@@ -157,6 +164,7 @@ private:
   bool takeoff_done_{false};
   bool requested_land_{false};
   bool land_done_{true};
+  bool land_rampdown_{false};
   bool is_active_{false};
 };
 }  // namespace laser_uav_managers
