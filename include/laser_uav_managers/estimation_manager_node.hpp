@@ -84,7 +84,7 @@ private:
 
   void odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
-  void motorSpeedCallback(const laser_msgs::msg::MotorSpeedStamped::SharedPtr msg);
+  void garminRangeCallback(const sensor_msgs::msg::Range::SharedPtr msg);
 
   void controlCallback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg);
 
@@ -127,7 +127,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_px4_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_openvins_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_fast_lio_sub_;
-  rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::SharedPtr     motor_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Range>::SharedPtr                garmin_sub_;
   rclcpp::Subscription<laser_msgs::msg::UavControlDiagnostics>::SharedPtr control_sub_;
   rclcpp::TimerBase::SharedPtr                                            timer_;
   rclcpp::TimerBase::SharedPtr                                            check_subscribers_timer_;
@@ -140,21 +140,21 @@ private:
   rclcpp::Time                          last_px4_odom_time_;
   rclcpp::Time                          last_openvins_odom_time_;
   rclcpp::Time                          last_fast_lio_odom_time_;
-  rclcpp::Time                          last_motor_speed_time_;
+  rclcpp::Time                          last_garmin_range_time_;
   rclcpp::Time                          last_control_input_time_;
   std::chrono::steady_clock::time_point last_cpp_time_point_;
 
   SensorDataBuffer<nav_msgs::msg::Odometry>                px4_odom_data_;
   SensorDataBuffer<nav_msgs::msg::Odometry>                openvins_odom_data_;
   SensorDataBuffer<nav_msgs::msg::Odometry>                fast_lio_odom_data_;
-  SensorDataBuffer<laser_msgs::msg::MotorSpeedStamped>     motor_speed_data_;
   SensorDataBuffer<laser_msgs::msg::UavControlDiagnostics> control_data_;
+  SensorDataBuffer<sensor_msgs::msg::Range>                garmin_data_;
 
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_px4_msg_;
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_openvins_msg_;
   nav_msgs::msg::Odometry::SharedPtr                last_odometry_fast_lio_msg_;
-  laser_msgs::msg::MotorSpeedStamped::SharedPtr     last_motor_speed_msg_;
   laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_msg_;
+  sensor_msgs::msg::Range::SharedPtr                last_garmin_range_msg_;
 
   bool is_prediction{false};
   bool is_active_{false};
@@ -165,6 +165,10 @@ private:
   bool enable_px4_odom_{false};
   bool enable_openvins_odom_{false};
   bool enable_fast_lio_odom_{false};
+
+  bool   garmin_offset_calibrated_{false};
+  double garmin_calibrated_offset_{-1.0};
+  int    garmin_counter_{0};
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::shared_ptr<tf2_ros::Buffer>               tf_buffer_;
@@ -196,21 +200,13 @@ private:
   laser_uav_estimators::MeasurementNoiseGains px4_measurement_noise_gains_;
   laser_uav_estimators::MeasurementNoiseGains openvins_measurement_noise_gains_;
   laser_uav_estimators::MeasurementNoiseGains fast_lio_measurement_noise_gains_;
+  laser_uav_estimators::MeasurementNoiseGains garmin_measurement_noise_gains_;
 
-  double px4_odom_tolerance_;
-  double px4_odom_timeout_;
   double px4_odom_covariance_;
-  double openvins_odom_tolerance_;
-  double openvins_odom_timeout_;
   double openvins_odom_covariance_;
-  double fast_lio_odom_tolerance_;
-  double fast_lio_odom_timeout_;
   double fast_lio_odom_covariance_;
-  double imu_tolerance_;
-  double imu_timeout_;
-  double imu_covariance_;
-  double control_tolerance_;
-  double control_timeout_;
+  double garmin_covariance_;
+
 
   /*//}*/
 };

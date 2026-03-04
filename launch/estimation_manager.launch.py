@@ -104,7 +104,7 @@ def generate_launch_description():
             ('odometry_fast_lio_in', 'fast_lio/odometry_high_freq'),
             ('odometry_openvins_in', 'vins_republisher/odometry'),
             ('control_in', 'control_manager/diagnostics'),
-            ('motor_speed_in', '/hw_api/motor_speed_estimated'),
+            ('garmin_in', 'px4_api/garmin'),
             ('odometry_out', 'estimation_manager/estimation'),
             ('odometry_predict', 'estimation_manager/estimation_predict'),
             ('set_odometry', 'set_odometry'),
