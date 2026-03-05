@@ -188,41 +188,77 @@ void EstimationManager::getParameters() {
   int num_cols       = G1_vec.size() / 4;
   allocation_matrix_ = Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(G1_vec.data(), 4, num_cols);
 
-  get_parameter("process_noise_gains.position_xy", process_noise_gains_.position_xy);
-  get_parameter("process_noise_gains.position_z", process_noise_gains_.position_z);
-  get_parameter("process_noise_gains.orientation", process_noise_gains_.orientation);
-  get_parameter("process_noise_gains.linear_velocity_xy", process_noise_gains_.velocity_linear_xy);
-  get_parameter("process_noise_gains.linear_velocity_z", process_noise_gains_.velocity_linear_z);
-  get_parameter("process_noise_gains.angular_velocity", process_noise_gains_.velocity_angular);
+  double aux;
+  get_parameter("process_noise_gains.position_xy", aux);
+  process_noise_gains_.position.x = aux;
+  process_noise_gains_.position.y = aux;
+  get_parameter("process_noise_gains.position_z", process_noise_gains_.position.z);
+  get_parameter("process_noise_gains.orientation", aux);
+  process_noise_gains_.orientation.roll  = aux;
+  process_noise_gains_.orientation.pitch = aux;
+  process_noise_gains_.orientation.yaw   = aux;
+  get_parameter("process_noise_gains.linear_velocity_xy", aux);
+  process_noise_gains_.linear_velocity.vx = aux;
+  process_noise_gains_.linear_velocity.vy = aux;
+  get_parameter("process_noise_gains.linear_velocity_z", process_noise_gains_.linear_velocity.vz);
+  get_parameter("process_noise_gains.angular_velocity", aux);
+  process_noise_gains_.angular_velocity.wx = aux;
+  process_noise_gains_.angular_velocity.wy = aux;
+  process_noise_gains_.angular_velocity.wz = aux;
 
-  get_parameter("measurement_noise_gains.px4_odometry.position_xy", px4_measurement_noise_gains_.odometry.position_xy);
-  get_parameter("measurement_noise_gains.px4_odometry.position_z", px4_measurement_noise_gains_.odometry.position_z);
-  get_parameter("measurement_noise_gains.px4_odometry.orientation", px4_measurement_noise_gains_.odometry.orientation);
-  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity_xy", px4_measurement_noise_gains_.odometry.velocity_linear_xy);
-  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity", px4_measurement_noise_gains_.odometry.velocity_linear_z);
-  get_parameter("measurement_noise_gains.px4_odometry.angular_velocity", px4_measurement_noise_gains_.odometry.velocity_angular);
+  get_parameter("measurement_noise_gains.px4_odometry.position_xy", aux);
+  px4_measurement_noise_gains_.odometry.position.x = aux;
+  px4_measurement_noise_gains_.odometry.position.y = aux;
+  get_parameter("measurement_noise_gains.px4_odometry.position_z", px4_measurement_noise_gains_.odometry.position.z);
+  get_parameter("measurement_noise_gains.px4_odometry.orientation", aux);
+  px4_measurement_noise_gains_.odometry.orientation.roll  = aux;
+  px4_measurement_noise_gains_.odometry.orientation.pitch = aux;
+  px4_measurement_noise_gains_.odometry.orientation.yaw   = aux;
+  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity_xy", aux);
+  px4_measurement_noise_gains_.odometry.linear_velocity.vx = aux;
+  px4_measurement_noise_gains_.odometry.linear_velocity.vy = aux;
+  get_parameter("measurement_noise_gains.px4_odometry.linear_velocity_z", px4_measurement_noise_gains_.odometry.linear_velocity.vz);
+  get_parameter("measurement_noise_gains.px4_odometry.angular_velocity", aux);
+  px4_measurement_noise_gains_.odometry.angular_velocity.wx = aux;
+  px4_measurement_noise_gains_.odometry.angular_velocity.wy = aux;
+  px4_measurement_noise_gains_.odometry.angular_velocity.wz = aux;
 
-  get_parameter("measurement_noise_gains.openvins.position_xy", openvins_measurement_noise_gains_.odometry.position_xy);
-  get_parameter("measurement_noise_gains.openvins.position_z", openvins_measurement_noise_gains_.odometry.position_z);
-  get_parameter("measurement_noise_gains.openvins.orientation", openvins_measurement_noise_gains_.odometry.orientation);
-  get_parameter("measurement_noise_gains.openvins.linear_velocity_xy", openvins_measurement_noise_gains_.odometry.velocity_linear_xy);
-  get_parameter("measurement_noise_gains.openvins.linear_velocity_z", openvins_measurement_noise_gains_.odometry.velocity_linear_z);
-  get_parameter("measurement_noise_gains.openvins.angular_velocity", openvins_measurement_noise_gains_.odometry.velocity_angular);
+  get_parameter("measurement_noise_gains.openvins.position_xy", aux);
+  openvins_measurement_noise_gains_.odometry.position.x = aux;
+  openvins_measurement_noise_gains_.odometry.position.y = aux;
+  get_parameter("measurement_noise_gains.openvins.position_z", openvins_measurement_noise_gains_.odometry.position.z);
+  get_parameter("measurement_noise_gains.openvins.orientation", aux);
+  openvins_measurement_noise_gains_.odometry.orientation.roll  = aux;
+  openvins_measurement_noise_gains_.odometry.orientation.pitch = aux;
+  openvins_measurement_noise_gains_.odometry.orientation.yaw   = aux;
+  get_parameter("measurement_noise_gains.openvins.linear_velocity_xy", aux);
+  openvins_measurement_noise_gains_.odometry.linear_velocity.vx = aux;
+  openvins_measurement_noise_gains_.odometry.linear_velocity.vy = aux;
+  get_parameter("measurement_noise_gains.openvins.linear_velocity_z", openvins_measurement_noise_gains_.odometry.linear_velocity.vz);
+  get_parameter("measurement_noise_gains.openvins.angular_velocity", aux);
+  openvins_measurement_noise_gains_.odometry.angular_velocity.wx = aux;
+  openvins_measurement_noise_gains_.odometry.angular_velocity.wy = aux;
+  openvins_measurement_noise_gains_.odometry.angular_velocity.wz = aux;
 
+  get_parameter("measurement_noise_gains.fast_lio.position_xy", aux);
+  fast_lio_measurement_noise_gains_.odometry.position.x = aux;
+  fast_lio_measurement_noise_gains_.odometry.position.y = aux;
+  get_parameter("measurement_noise_gains.fast_lio.position_z", fast_lio_measurement_noise_gains_.odometry.position.z);
+  get_parameter("measurement_noise_gains.fast_lio.orientation", aux);
+  fast_lio_measurement_noise_gains_.odometry.orientation.roll  = aux;
+  fast_lio_measurement_noise_gains_.odometry.orientation.pitch = aux;
+  fast_lio_measurement_noise_gains_.odometry.orientation.yaw   = aux;
+  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_xy", aux);
+  fast_lio_measurement_noise_gains_.odometry.linear_velocity.vx = aux;
+  fast_lio_measurement_noise_gains_.odometry.linear_velocity.vy = aux;
+  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_z", fast_lio_measurement_noise_gains_.odometry.linear_velocity.vz);
+  get_parameter("measurement_noise_gains.fast_lio.angular_velocity", aux);
+  fast_lio_measurement_noise_gains_.odometry.angular_velocity.wx = aux;
+  fast_lio_measurement_noise_gains_.odometry.angular_velocity.wy = aux;
+  fast_lio_measurement_noise_gains_.odometry.angular_velocity.wz = aux;
 
-  get_parameter("measurement_noise_gains.fast_lio.position_xy", fast_lio_measurement_noise_gains_.odometry.position_xy);
-  get_parameter("measurement_noise_gains.fast_lio.position_z", fast_lio_measurement_noise_gains_.odometry.position_z);
-  get_parameter("measurement_noise_gains.fast_lio.orientation", fast_lio_measurement_noise_gains_.odometry.orientation);
-  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_xy", fast_lio_measurement_noise_gains_.odometry.velocity_linear_xy);
-  get_parameter("measurement_noise_gains.fast_lio.linear_velocity_z", fast_lio_measurement_noise_gains_.odometry.velocity_linear_z);
-  get_parameter("measurement_noise_gains.fast_lio.angular_velocity", fast_lio_measurement_noise_gains_.odometry.velocity_angular);
+  get_parameter("measurement_noise_gains.garmin.position_z", garmin_measurement_noise_gains_.odometry.position.z);
 
-  double garmin_position_z_gain;
-  get_parameter("measurement_noise_gains.garmin.position_z", garmin_position_z_gain);
-
-  fast_lio_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  openvins_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  px4_measurement_noise_gains_.garmin.position_z      = garmin_position_z_gain;
 
   double tolerance, timeout;
 
@@ -304,34 +340,31 @@ void EstimationManager::setupEKF() {
   Eigen::Matrix3d inertia = Eigen::Vector3d(inertia_vec_[0], inertia_vec_[1], inertia_vec_[2]).asDiagonal();
 
 
+  mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, px4_measurement_noise_gains_,
+                                                                fast_lio_measurement_noise_gains_, openvins_measurement_noise_gains_,
+                                                                garmin_measurement_noise_gains_, process_noise_gains_, ekf_verbosity_);
+
   if (current_active_odometry_name_ == "px4_api_odom") {
-    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, px4_measurement_noise_gains_, process_noise_gains_,
-                                                                  ekf_verbosity_);
+
     enable_px4_odom_      = true;
     enable_openvins_odom_ = false;
     enable_fast_lio_odom_ = false;
     RCLCPP_INFO(get_logger(), "Initial odometry source set to \'px4_api_odom\'.");
   } else if (current_active_odometry_name_ == "openvins_odom") {
-    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, openvins_measurement_noise_gains_, process_noise_gains_,
-                                                                  ekf_verbosity_);
     enable_px4_odom_      = false;
     enable_openvins_odom_ = true;
     enable_fast_lio_odom_ = false;
     RCLCPP_INFO(get_logger(), "Initial odometry source set to \'openvins_odom\'.");
   } else if (current_active_odometry_name_ == "fast_lio_odom") {
-    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, fast_lio_measurement_noise_gains_, process_noise_gains_,
-                                                                  ekf_verbosity_);
     enable_px4_odom_      = false;
     enable_openvins_odom_ = false;
     enable_fast_lio_odom_ = true;
     RCLCPP_INFO(get_logger(), "Initial odometry source set to \'fast_lio_odom\'.");
   } else {
     current_active_odometry_name_ = "px4_api_odom";
-    mekf_ = std::make_unique<laser_uav_estimators::MEKFEstimator>(mass_, allocation_matrix_, inertia, px4_measurement_noise_gains_, process_noise_gains_,
-                                                                  ekf_verbosity_);
-    enable_px4_odom_      = true;
-    enable_openvins_odom_ = false;
-    enable_fast_lio_odom_ = false;
+    enable_px4_odom_              = true;
+    enable_openvins_odom_         = false;
+    enable_fast_lio_odom_         = false;
     RCLCPP_WARN(get_logger(), "Invalid initial odometry source. Using 'px4_api_odom' as default.");
   }
 
@@ -515,15 +548,6 @@ void EstimationManager::setOdometryCallback(const std::shared_ptr<laser_msgs::sr
   enable_fast_lio_odom_         = (new_source == "fast_lio_odom");
   current_active_odometry_name_ = new_source;
 
-  if (new_source == "px4_api_odom") {
-    mekf_->set_measurement_noise_gains(px4_measurement_noise_gains_);
-  } else if (new_source == "openvins_odom") {
-    mekf_->set_measurement_noise_gains(openvins_measurement_noise_gains_);
-  } else if (new_source == "fast_lio_odom") {
-    mekf_->set_measurement_noise_gains(fast_lio_measurement_noise_gains_);
-  }
-
-
   response->success = true;
   response->message = "Odometry source switched to: " + current_active_odometry_name_;
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
@@ -698,10 +722,11 @@ void EstimationManager::timerCallback() {
         }
 
 
-        if (can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
+        const std::size_t motor_count = static_cast<std::size_t>(allocation_matrix_.cols());
+        if (can_predict && control_msg->last_control_input.data.size() != motor_count) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
-          RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "Control input size does not match number of motors (%d). Resizing input vector.",
-                                allocation_matrix_.cols());
+          RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000,
+                                "Control input size does not match number of motors (%zu). Resizing input vector.", motor_count);
         }
 
 
@@ -738,29 +763,26 @@ void EstimationManager::timerCallback() {
     laser_uav_estimators::MeasurementPackage measurement;
     if (is_first_control_msg) {
       if (px4_odom_msg && enable_px4_odom_) {
-        has_measurement      = true;
-        measurement.odometry = &(*px4_odom_msg);
-        last_update_time_    = rclcpp::Time(px4_odom_msg->header.stamp);
+        has_measurement   = true;
+        measurement.px4   = *px4_odom_msg;
+        last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
       } else if (openvins_odom_msg && enable_openvins_odom_) {
         has_measurement      = true;
-        measurement.odometry = &(*openvins_odom_msg);
+        measurement.openvins = *openvins_odom_msg;
         last_update_time_    = rclcpp::Time(openvins_odom_msg->header.stamp);
       } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
         has_measurement      = true;
-        measurement.odometry = &(*fast_lio_odom_msg);
+        measurement.fast_lio = *fast_lio_odom_msg;
         last_update_time_    = rclcpp::Time(fast_lio_odom_msg->header.stamp);
       }
 
       if (garmin_range_msg) {
-        measurement.garmin = &(*garmin_range_msg);
+        measurement.garmin = *garmin_range_msg;
         last_update_time_  = rclcpp::Time(garmin_range_msg->header.stamp);
       }
 
       if (has_measurement) {
         mekf_->correct(measurement);
-        if (measurement.odometry != nullptr) {
-          last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
-        }
       }
     }
 
