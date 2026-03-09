@@ -69,7 +69,6 @@ private:
   void                            configTimers();
   void                            configServices();
   void                            configClasses();
-  laser_msgs::msg::ReferenceState odomToReferenceState();
   double                          checkHeadingError();
   double                          quaternionToHeading(const Eigen::Quaterniond &q);
   void                            checkSafeArea();
