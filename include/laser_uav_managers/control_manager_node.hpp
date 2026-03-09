@@ -27,6 +27,9 @@
 #include <laser_uav_controllers/nmpc_controller.hpp>
 #include <laser_uav_controllers/indi_controller.hpp>
 
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/LinearMath/Transform.h"
+
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
 namespace laser_uav_managers
@@ -61,14 +64,15 @@ private:
 
   rclcpp::CallbackGroup::SharedPtr callback_group_;
 
-  void   getParameters();
-  void   configPubSub();
-  void   configTimers();
-  void   configServices();
-  void   configClasses();
-  double checkHeadingError();
-  double quaternionToHeading(const Eigen::Quaterniond &q);
-  void   checkSafeArea();
+  void                            getParameters();
+  void                            configPubSub();
+  void                            configTimers();
+  void                            configServices();
+  void                            configClasses();
+  laser_msgs::msg::ReferenceState odomToReferenceState();
+  double                          checkHeadingError();
+  double                          quaternionToHeading(const Eigen::Quaterniond &q);
+  void                            checkSafeArea();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
@@ -81,6 +85,9 @@ private:
 
   rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
   void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
+
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_relative_;
+  void                                                                   subGotoRelative(const laser_msgs::msg::PoseWithHeading &msg);
 
   rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
   void                                                                  subTrajectoryPath(const laser_msgs::msg::TrajectoryPath &msg);
