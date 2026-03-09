@@ -151,6 +151,7 @@ CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_life
 
   sub_odometry_.reset();
   sub_goto_.reset();
+  sub_goto_relative_.reset();
   sub_api_diagnostics_.reset();
   sub_trajectory_path_.reset();
 
@@ -278,6 +279,7 @@ void ControlManagerNode::configPubSub() {
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
   sub_goto_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
+  sub_goto_relative_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1, std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
   sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
       "api_diagnostics_in", 1, std::bind(&ControlManagerNode::subApiDiagnostics, this, std::placeholders::_1));
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>("trajectory_path_in", 1,
@@ -365,7 +367,7 @@ void ControlManagerNode::checkSafeArea() {
 
   bool                             path_is_ok = true;
   laser_msgs::msg::PoseWithHeading emergency_hover_reference;
-  emergency_hover_reference.position = last_waypoint_.pose.position;
+  emergency_hover_reference.position = odometry_.pose.pose.position;
 
   if (current_horizon_path_[0].pose.position.x < _safe_area_.x[0]) {
     emergency_hover_reference.position.x = _safe_area_.x[0] + 0.05;
@@ -415,10 +417,11 @@ void ControlManagerNode::checkSafeArea() {
                 _safe_area_.x[1], _safe_area_.y[1], _safe_area_.x[1], _safe_area_.y[0], _safe_area_.z[0], _safe_area_.z[1], _safe_area_.x[0], _safe_area_.y[1],
                 _safe_area_.x[0], _safe_area_.y[0]);
 
-    Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
-                         last_waypoint_.pose.orientation.z);
+    Eigen::Quaterniond q(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                         odometry_.pose.pose.orientation.z);
     emergency_hover_reference.heading = quaternionToHeading(q);
-    agile_planner_.generateTrajectory(last_waypoint_, emergency_hover_reference, 0.0, false);
+
+    agile_planner_.generateTrajectory(odometry_, emergency_hover_reference, 0.0, false);
     emergency_hover_ = true;
   }
 }
@@ -485,7 +488,7 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
   }
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
-    agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
+    agile_planner_.generateTrajectory(odometry_, msg.waypoints, msg.speed);
     desired_path_    = msg.waypoints;
     emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
@@ -503,12 +506,44 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
   }
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
-    agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
+    agile_planner_.generateTrajectory(odometry_, msg, 0.0, false);
     emergency_hover_ = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
     diagnostics_.have_goal = true;
   } else {
     RCLCPP_WARN(this->get_logger(), "GOTO's Point not will executed, because the uav is not flying.");
+  }
+}
+//}
+
+/* subGotoRelative() //{ */
+void ControlManagerNode::subGotoRelative(const laser_msgs::msg::PoseWithHeading &msg) {
+  if (!is_active_) {
+    return;
+  }
+
+  if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
+    tf2::Transform world_to_body_tf;
+    tf2::Vector3   aux;
+
+    tf2::fromMsg(odometry_.pose.pose, world_to_body_tf);
+    tf2::fromMsg(msg.position, aux);
+
+    laser_msgs::msg::PoseWithHeading world_point;
+    aux                    = world_to_body_tf * aux;
+    world_point.position.x = aux.x();
+    world_point.position.y = aux.y();
+    world_point.position.z = aux.z();
+    Eigen::Quaterniond q(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                         odometry_.pose.pose.orientation.z);
+    world_point.heading = quaternionToHeading(q) + msg.heading;
+
+    agile_planner_.generateTrajectory(odometry_, world_point, 0.0, false);
+    emergency_hover_ = false;
+    RCLCPP_INFO(this->get_logger(), "GOTO's Relative Point Received!");
+    diagnostics_.have_goal = true;
+  } else {
+    RCLCPP_WARN(this->get_logger(), "GOTO's Relative Point not will executed, because the uav is not flying.");
   }
 }
 //}
@@ -536,19 +571,16 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
 
     requested_takeoff_ = true;
 
-    laser_msgs::msg::ReferenceState ground_waypoint;
-    ground_waypoint.pose = odometry_.pose.pose;
-
     laser_msgs::msg::PoseWithHeading takeoff_waypoint;
-    takeoff_waypoint.position   = ground_waypoint.pose.position;
+    takeoff_waypoint.position   = odometry_.pose.pose.position;
     takeoff_waypoint.position.z = _takeoff_height_;
 
-    Eigen::Quaterniond q(ground_waypoint.pose.orientation.w, ground_waypoint.pose.orientation.x, ground_waypoint.pose.orientation.y,
-                         ground_waypoint.pose.orientation.z);
+    Eigen::Quaterniond q(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                         odometry_.pose.pose.orientation.z);
     q.normalize();
     takeoff_waypoint.heading = quaternionToHeading(q);
 
-    agile_planner_.generateTrajectory(ground_waypoint, takeoff_waypoint, _takeoff_speed_, true);
+    agile_planner_.generateTrajectory(odometry_, takeoff_waypoint, _takeoff_speed_, true);
 
     land_done_             = false;
     diagnostics_.have_goal = true;
@@ -572,18 +604,16 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
 
     requested_land_ = true;
 
-    laser_msgs::msg::ReferenceState current_pose;
-    current_pose.pose = odometry_.pose.pose;
-
     laser_msgs::msg::PoseWithHeading land_waypoint;
     land_waypoint.position   = odometry_.pose.pose.position;
     land_waypoint.position.z = -1.0;
 
-    Eigen::Quaterniond q(current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z);
+    Eigen::Quaterniond q(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                         odometry_.pose.pose.orientation.z);
     q.normalize();
     land_waypoint.heading = quaternionToHeading(q);
 
-    agile_planner_.generateTrajectory(current_pose, land_waypoint, _land_speed_, true);
+    agile_planner_.generateTrajectory(odometry_, land_waypoint, _land_speed_, true);
 
     takeoff_done_          = false;
     diagnostics_.have_goal = true;
@@ -600,6 +630,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
   if (lock_control_inputs_) {
     return;
   }
+
+  auto start_iteration = std::chrono::high_resolution_clock::now();
 
   if (land_rampdown_) {
     RCLCPP_INFO(this->get_logger(), "Land Ramp Down: %.2f", land_start_rampdown_);
@@ -637,6 +669,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       land_start_rampdown_ = 0.0;
     }
 
+    diagnostics_.control_iteration_duration_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start_iteration).count();
     return;
   }
 
@@ -720,20 +753,22 @@ void ControlManagerNode::tmrExternalLoopControl() {
       RCLCPP_INFO(this->get_logger(), "Start Land Ramp Down!");
     } else if (agile_planner_.isHover()) {
       laser_msgs::msg::PoseWithHeading land_waypoint;
-      land_waypoint.position = last_waypoint_.pose.position;
-      Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
-                           last_waypoint_.pose.orientation.z);
+      land_waypoint.position = odometry_.pose.pose.position;
+      Eigen::Quaterniond q(odometry_.pose.pose.orientation.w, odometry_.pose.pose.orientation.x, odometry_.pose.pose.orientation.y,
+                           odometry_.pose.pose.orientation.z);
       q.normalize();
       land_waypoint.heading = quaternionToHeading(q);
       land_waypoint.position.z += -1.0;
 
-      agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, 0.2, true);
+      agile_planner_.generateTrajectory(odometry_, land_waypoint, 0.2, true);
     }
   }
 
   if (diagnostics_.have_goal) {
     diagnostics_.have_goal = !agile_planner_.isHover() || (checkHeadingError() > 0.1);
   }
+
+  diagnostics_.control_iteration_duration_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start_iteration).count();
 }
 //}
 
