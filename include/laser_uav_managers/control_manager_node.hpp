@@ -70,8 +70,10 @@ private:
   void   configTimers();
   void   configServices();
   void   configClasses();
+  double euclideanDistance(geometry_msgs::msg::Point p1, geometry_msgs::msg::Point p2);
   double checkHeadingError();
-  double quaternionToHeading(const Eigen::Quaterniond &q);
+  double normalizeHeading(double heading);
+  double quaternionToHeading(geometry_msgs::msg::Quaternion &q);
   void   checkSafeArea();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
@@ -150,8 +152,7 @@ private:
 
   double estimated_mass_for_detect_landing_;
 
-  int  lock_waypoint_;
-  bool _agile_fly_;
+  int lock_waypoint_;
 
   double _takeoff_height_;
   double _takeoff_speed_;
@@ -164,6 +165,7 @@ private:
 
   laser_uav_lib::RMSE estimated_rmse_;
 
+  bool stop_on_waypoints_{false};
   bool emergency_hover_{false};
   bool calculate_rmse_{false};
   bool received_first_odometry_msg_{false};
