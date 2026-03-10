@@ -725,8 +725,8 @@ void EstimationManager::timerCallback() {
         const std::size_t motor_count = static_cast<std::size_t>(allocation_matrix_.cols());
         if (can_predict && control_msg->last_control_input.data.size() != motor_count) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
-          RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000,
-                                "Control input size does not match number of motors (%zu). Resizing input vector.", motor_count);
+          RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "Control input size does not match number of motors (%zu). Resizing input vector.",
+                                motor_count);
         }
 
 
@@ -877,32 +877,26 @@ void EstimationManager::diagnosticsTimerCallback() {
 void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time) {
   const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
-  // 1. Criar a mensagem de Odometria (normal)
   nav_msgs::msg::Odometry odom_out_msg = state;
   odom_out_msg.header.stamp            = pub_time;
   odom_out_msg.header.frame_id         = _uav_name_ + "/odometry";
   odom_out_msg.child_frame_id          = _uav_name_ + "/fcu";
   pub->publish(odom_out_msg);
 
-  // 2. Lógica da Transformada (Seguindo o exemplo que funciona)
   try {
-    // Busca a relação entre o sensor e o drone
 
     Eigen::Quaterniond q_odom(state.pose.pose.orientation.w, state.pose.pose.orientation.x, state.pose.pose.orientation.y, state.pose.pose.orientation.z);
 
-    // Prepara a TF Direta
     tf2::Transform tf_direta;
     tf_direta.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
     tf_direta.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
 
-    // 3. INVERSÃO (O "pulo do gato" do seu segundo código)
-    tf2::Transform tf_invertida = tf_direta.inverse();
 
     geometry_msgs::msg::TransformStamped dynamic_tf;
     dynamic_tf.header.stamp    = pub_time;
-    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";       // O pai vira o FCU
-    dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";  // O filho vira a Odometria
-    dynamic_tf.transform       = tf2::toMsg(tf_invertida);
+    dynamic_tf.header.frame_id = _uav_name_ + "/odometry";
+    dynamic_tf.child_frame_id  = _uav_name_ + "/fcu";
+    dynamic_tf.transform       = tf2::toMsg(tf_direta);
 
     tf_broadcaster_->sendTransform(dynamic_tf);
   }
