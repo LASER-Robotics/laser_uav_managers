@@ -22,6 +22,7 @@
 #include <laser_msgs/msg/motor_speed.hpp>
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
+#include <laser_uav_lib/metrics/rmse.hpp>
 
 #include <laser_uav_planners/agile_planner.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
@@ -64,14 +65,14 @@ private:
 
   rclcpp::CallbackGroup::SharedPtr callback_group_;
 
-  void                            getParameters();
-  void                            configPubSub();
-  void                            configTimers();
-  void                            configServices();
-  void                            configClasses();
-  double                          checkHeadingError();
-  double                          quaternionToHeading(const Eigen::Quaterniond &q);
-  void                            checkSafeArea();
+  void   getParameters();
+  void   configPubSub();
+  void   configTimers();
+  void   configServices();
+  void   configClasses();
+  double checkHeadingError();
+  double quaternionToHeading(const Eigen::Quaterniond &q);
+  void   checkSafeArea();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
@@ -161,7 +162,10 @@ private:
 
   double land_start_rampdown_;
 
+  laser_uav_lib::RMSE estimated_rmse_;
+
   bool emergency_hover_{false};
+  bool calculate_rmse_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
