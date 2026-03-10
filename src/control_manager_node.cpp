@@ -279,7 +279,8 @@ void ControlManagerNode::configPubSub() {
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
   sub_goto_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
-  sub_goto_relative_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1, std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
+  sub_goto_relative_   = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1,
+                                                                             std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
   sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
       "api_diagnostics_in", 1, std::bind(&ControlManagerNode::subApiDiagnostics, this, std::placeholders::_1));
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>("trajectory_path_in", 1,
@@ -713,6 +714,13 @@ void ControlManagerNode::tmrExternalLoopControl() {
   have_nmpc_control_input_ = true;
 
   diagnostics_.last_planner_waypoint = last_waypoint_;
+  if (diagnostics_.have_goal) {
+    estimated_rmse_.pushReference(odometry_.pose.pose.position);
+    estimated_rmse_.pushEstimated(last_waypoint_.pose.position);
+
+    diagnostics_.metrics.rmse = -1.0;
+    diagnostics_.metrics.std  = -1.0;
+  }
 
   if (angular_rates_and_thrust_mode_) {
     estimated_mass_for_detect_landing_ = (1 / GRAVITY) * nmpc_control_input_(0);
@@ -766,6 +774,10 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   if (diagnostics_.have_goal) {
     diagnostics_.have_goal = !agile_planner_.isHover() || (checkHeadingError() > 0.1);
+
+    if (!diagnostics_.have_goal) {
+      calculate_rmse_ = true;
+    }
   }
 
   diagnostics_.control_iteration_duration_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start_iteration).count();
@@ -811,6 +823,14 @@ void ControlManagerNode::tmrInternalLoopControl() {
 void ControlManagerNode::tmrDiagnostics() {
   if (!is_active_) {
     return;
+  }
+
+  if (calculate_rmse_) {
+    auto result       = estimated_rmse_.calculate();
+    diagnostics_.metrics.rmse = result.first;
+    diagnostics_.metrics.std  = result.second;
+    estimated_rmse_.reset();
+    calculate_rmse_ = false;
   }
 
   diagnostics_.header.stamp    = get_clock()->now();
