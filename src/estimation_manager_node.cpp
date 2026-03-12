@@ -878,7 +878,7 @@ void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav
   const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
   nav_msgs::msg::Odometry odom_out_msg = state;
-  odom_out_msg.header.stamp            = pub_time;
+  odom_out_msg.header.stamp            = this->get_clock()->now();
   odom_out_msg.header.frame_id         = _uav_name_ + "/odometry";
   odom_out_msg.child_frame_id          = _uav_name_ + "/fcu";
   pub->publish(odom_out_msg);
@@ -893,7 +893,7 @@ void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav
 
 
     geometry_msgs::msg::TransformStamped dynamic_tf;
-    dynamic_tf.header.stamp    = pub_time;
+    dynamic_tf.header.stamp    = this->get_clock()->now();
     dynamic_tf.header.frame_id = _uav_name_ + "/odometry";
     dynamic_tf.child_frame_id  = _uav_name_ + "/fcu";
     dynamic_tf.transform       = tf2::toMsg(tf_direta);
