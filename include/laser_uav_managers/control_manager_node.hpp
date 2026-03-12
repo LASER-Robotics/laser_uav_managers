@@ -22,10 +22,14 @@
 #include <laser_msgs/msg/motor_speed.hpp>
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
+#include <laser_uav_lib/metrics/rmse.hpp>
 
 #include <laser_uav_planners/agile_planner.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
 #include <laser_uav_controllers/indi_controller.hpp>
+
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2/LinearMath/Transform.h"
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -66,8 +70,10 @@ private:
   void   configTimers();
   void   configServices();
   void   configClasses();
+  double euclideanDistance(geometry_msgs::msg::Point p1, geometry_msgs::msg::Point p2);
   double checkHeadingError();
-  double quaternionToHeading(const Eigen::Quaterniond &q);
+  double normalizeHeading(double heading);
+  double quaternionToHeading(geometry_msgs::msg::Quaternion &q);
   void   checkSafeArea();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
@@ -81,6 +87,9 @@ private:
 
   rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
   void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
+
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_relative_;
+  void                                                                   subGotoRelative(const laser_msgs::msg::PoseWithHeading &msg);
 
   rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
   void                                                                  subTrajectoryPath(const laser_msgs::msg::TrajectoryPath &msg);
@@ -143,8 +152,7 @@ private:
 
   double estimated_mass_for_detect_landing_;
 
-  int  lock_waypoint_;
-  bool _agile_fly_;
+  int lock_waypoint_;
 
   double _takeoff_height_;
   double _takeoff_speed_;
@@ -155,7 +163,11 @@ private:
 
   double land_start_rampdown_;
 
+  laser_uav_lib::RMSE estimated_rmse_;
+
+  bool stop_on_waypoints_{false};
   bool emergency_hover_{false};
+  bool calculate_rmse_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
