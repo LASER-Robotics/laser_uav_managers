@@ -89,9 +89,10 @@ def generate_launch_description():
         output='screen',
         parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[
-            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            # ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/hw_api/odometry'),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/hw_api/motor_speed_estimated'),
-            ('/' + uav_name + '/imu_in', '/' + uav_name + '/px4_api/imu'),
+            ('/' + uav_name + '/imu_in', '/' + uav_name + '/hw_api/imu'),
             ('/' + uav_name + '/motor_speed_reference_out', '/' + uav_name + '/control_manager/motor_speed_reference'),
             ('/' + uav_name + '/diagnostics_out', '/' + uav_name + '/control_manager/diagnostics'),
             ('/' + uav_name + '/attitude_rates_thrust_out', '/' + uav_name + '/control_manager/attitude_rates_thrust'),
@@ -100,7 +101,7 @@ def generate_launch_description():
             ('/' + uav_name + '/trajectory_path_in', '/' + uav_name + '/control_manager/trajectory_path'),
             ('/' + uav_name + '/takeoff', '/' + uav_name + '/control_manager/takeoff'),
             ('/' + uav_name + '/land', '/' + uav_name + '/control_manager/land'),
-            ('/' + uav_name + '/api_diagnostics_in', '/' + uav_name + '/px4_api/diagnostics'),
+            ('/' + uav_name + '/api_diagnostics_in', '/' + uav_name + '/hw_api/diagnostics'),
         ]
     )
 
