@@ -323,6 +323,7 @@ void EstimationManager::setupEKF() {
 
   RCLCPP_INFO(get_logger(), "EKF configured.");
 }
+//}
 
 /* odometryPx4Callback() //{ */
 void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -373,6 +374,7 @@ void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnos
       msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
       ((control_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp)).seconds()) : 0.0));
   control_data_.last_msg = msg;
+  mekf_->set_mass(msg->estimated_mass);
 }
 //}
 
@@ -822,6 +824,7 @@ void EstimationManager::diagnosticsTimerCallback() {
 }
 //}
 
+/* publishOdometry() //{ */
 void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time) {
   const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
@@ -858,7 +861,7 @@ void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav
     RCLCPP_WARN(this->get_logger(), "Falha na TF: %s", ex.what());
   }
 }
-
+//}
 }  // namespace laser_uav_managers
 
 RCLCPP_COMPONENTS_REGISTER_NODE(laser_uav_managers::EstimationManager)

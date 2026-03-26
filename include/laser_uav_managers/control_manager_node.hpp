@@ -75,6 +75,7 @@ private:
   double normalizeHeading(double heading);
   double quaternionToHeading(geometry_msgs::msg::Quaternion &q);
   void   checkSafeArea();
+  bool   estimateMass();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
@@ -124,11 +125,11 @@ private:
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState>  current_horizon_path_;
 
-  laser_uav_planners::quadrotor_t  _planner_quadrotor_params_;
+  laser_uav_planners::multirotor_t _planner_multirotor_params_;
   laser_uav_planners::pmm_t        _pmm_params_;
   laser_uav_planners::AgilePlanner agile_planner_;
 
-  laser_uav_controllers::quadrotor_t    _controller_quadrotor_params_;
+  laser_uav_controllers::multirotor_t   _controller_multirotor_params_;
   laser_uav_controllers::acados_t       _acados_params_;
   laser_uav_controllers::NmpcController nmpc_controller_;
   laser_uav_controllers::IndiController indi_controller_;
@@ -150,7 +151,9 @@ private:
   Eigen::Vector3d last_angular_speed_;
   Eigen::Vector3d angular_acceleration_estimated_;
 
-  double estimated_mass_for_detect_landing_;
+  rclcpp::Time mass_estimation_time_start_;
+  double       estimated_mass_;
+  double       estimated_mass_for_detect_landing_;
 
   int lock_waypoint_;
 
@@ -168,6 +171,7 @@ private:
   bool stop_on_waypoints_{false};
   bool emergency_hover_{false};
   bool calculate_rmse_{false};
+  bool start_mass_estimation_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
