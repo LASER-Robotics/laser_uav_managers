@@ -370,6 +370,7 @@ void EstimationManager::setupEKF() {
 
   RCLCPP_INFO(get_logger(), "EKF configured.");
 }
+//}
 
 /* odometryPx4Callback() //{ */
 void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -422,7 +423,6 @@ void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnos
   control_data_.last_msg = msg;
 }
 //}
-
 
 /* garminRangeCallback() //{ */
 void EstimationManager::garminRangeCallback(const sensor_msgs::msg::Range::SharedPtr msg) {
@@ -874,29 +874,30 @@ void EstimationManager::diagnosticsTimerCallback() {
 }
 //}
 
+/* publishOdometry() //{ */
 void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time) {
   const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
   nav_msgs::msg::Odometry odom_out_msg = state;
   odom_out_msg.header.stamp            = this->get_clock()->now();
-  odom_out_msg.header.frame_id         = _uav_name_ + "/odometry";
-  odom_out_msg.child_frame_id          = _uav_name_ + "/fcu";
+  odom_out_msg.header.frame_id         = _uav_name_ + "/fcu";
+  odom_out_msg.child_frame_id          = _uav_name_ + "/odometry";
   pub->publish(odom_out_msg);
 
   try {
-
     Eigen::Quaterniond q_odom(state.pose.pose.orientation.w, state.pose.pose.orientation.x, state.pose.pose.orientation.y, state.pose.pose.orientation.z);
 
-    tf2::Transform tf_direta;
-    tf_direta.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
-    tf_direta.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
+    tf2::Transform tf_direct;
+    tf_direct.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
+    tf_direct.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
 
+    tf2::Transform tf_inv = tf_direct.inverse();
 
     geometry_msgs::msg::TransformStamped dynamic_tf;
     dynamic_tf.header.stamp    = this->get_clock()->now();
-    dynamic_tf.header.frame_id = _uav_name_ + "/odometry";
-    dynamic_tf.child_frame_id  = _uav_name_ + "/fcu";
-    dynamic_tf.transform       = tf2::toMsg(tf_direta);
+    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";
+    dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";
+    dynamic_tf.transform       = tf2::toMsg(tf_inv);
 
     tf_broadcaster_->sendTransform(dynamic_tf);
   }
@@ -904,6 +905,7 @@ void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav
     RCLCPP_WARN(this->get_logger(), "Falha na TF: %s", ex.what());
   }
 }
+//}
 
 }  // namespace laser_uav_managers
 
