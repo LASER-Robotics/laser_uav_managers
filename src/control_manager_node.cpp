@@ -522,9 +522,11 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(odometry_, msg.waypoints, msg.speed);
-    stop_on_waypoints_ = msg.stop_on_waypoints;
-    desired_path_      = msg.waypoints;
-    emergency_hover_   = false;
+agile_planner_.resetPlannerTime();
+    mission_start_time_ = this->now().seconds();
+    stop_on_waypoints_  = msg.stop_on_waypoints;
+    desired_path_       = msg.waypoints;
+    emergency_hover_    = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -541,8 +543,10 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(odometry_, msg, 0.0, false);
-    stop_on_waypoints_ = false;
-    emergency_hover_   = false;
+agile_planner_.resetPlannerTime();
+    mission_start_time_ = this->now().seconds();
+    stop_on_waypoints_  = false;
+    emergency_hover_    = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -717,7 +721,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
     nmpc_control_input_ = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
   } else {
-    current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1);
+    current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1, this->get_clock()->now().seconds());
     if (_safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       checkSafeArea();
     }
@@ -754,7 +758,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
   }
 
   if (requested_takeoff_) {
-    if (agile_planner_.isHover()) {
+    /* if (agile_planner_.isHover()) { */
+    if (true) {
       if (estimateMass()) {
         requested_takeoff_  = false;
         takeoff_done_       = true;
