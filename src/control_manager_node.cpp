@@ -790,7 +790,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   if (diagnostics_.have_goal) {
     diagnostics_.have_goal =
-        (!(agile_planner_.isHover() && euclideanDistance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.1)) || (checkHeadingError() > 0.1);
+        (!(agile_planner_.isHover() && euclideanDistance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15)) || (checkHeadingError() > 0.15);
 
     if (!diagnostics_.have_goal) {
       calculate_rmse_ = true;
