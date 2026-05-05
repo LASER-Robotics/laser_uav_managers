@@ -325,7 +325,7 @@ void ControlManagerNode::configServices() {
 void ControlManagerNode::configClasses() {
   RCLCPP_INFO(get_logger(), "initClasses");
 
-  agile_planner_   = laser_uav_planners::AgilePlanner(_planner_multirotor_params_, _pmm_params_);
+  agile_planner_   = laser_uav_planners::AgilePlanner(_planner_multirotor_params_, _pmm_params_, _acados_params_.dt);
   nmpc_controller_ = laser_uav_controllers::NmpcController(_controller_multirotor_params_, _acados_params_);
   if (!angular_rates_and_thrust_mode_) {
     btw_gyro_x_ = laser_uav_lib::IIRFilter(_gyro_a_, _gyro_b_);
@@ -522,11 +522,9 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(odometry_, msg.waypoints, msg.speed);
-    agile_planner_.resetPlannerTime();
-    mission_start_time_ = this->now().seconds();
-    stop_on_waypoints_  = msg.stop_on_waypoints;
-    desired_path_       = msg.waypoints;
-    emergency_hover_    = false;
+    stop_on_waypoints_ = msg.stop_on_waypoints;
+    desired_path_      = msg.waypoints;
+    emergency_hover_   = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -543,10 +541,8 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     agile_planner_.generateTrajectory(odometry_, msg, 0.0, false);
-    agile_planner_.resetPlannerTime();
-    mission_start_time_ = this->now().seconds();
-    stop_on_waypoints_  = false;
-    emergency_hover_    = false;
+    stop_on_waypoints_ = false;
+    emergency_hover_   = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -719,24 +715,22 @@ void ControlManagerNode::tmrExternalLoopControl() {
     last_waypoint_.use_angular_velocity  = false;
     last_waypoint_.use_individual_thrust = false;
 
-    nmpc_control_input_ = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
+    nmpc_control_input_       = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
+    diagnostics_.header.stamp = get_clock()->now();
   } else {
-
     current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1, this->get_clock()->now().seconds());
-    /* current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1, rclcpp::Time(odometry_.header.stamp).seconds()); */
     if (_safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       checkSafeArea();
     }
     last_waypoint_ = current_horizon_path_[0];
     lock_waypoint_ = 0;
 
-    diagnostics_.sei_que_nome_nao  = odometry_;
     diagnostics_.reference_horizon = current_horizon_path_;
     nmpc_control_input_            = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
+    diagnostics_.header.stamp      = get_clock()->now();
   }
   have_nmpc_control_input_ = true;
 
-  /* diagnostics_.last_planner_waypoint = last_waypoint_; */
   if (diagnostics_.have_goal) {
     estimated_rmse_.pushEstimated(odometry_.pose.pose.position);
     estimated_rmse_.pushReference(last_waypoint_.pose.position);
@@ -762,14 +756,13 @@ void ControlManagerNode::tmrExternalLoopControl() {
   }
 
   if (requested_takeoff_) {
-    /* if (agile_planner_.isHover()) { */
-    if (true) {
-      /* if (estimateMass()) { */
+    if (agile_planner_.isHover()) {
+      if (estimateMass()) {
         requested_takeoff_  = false;
         takeoff_done_       = true;
         diagnostics_.is_fly = true;
         RCLCPP_INFO(this->get_logger(), "Takeoff Done!");
-      /* } */
+      }
     }
   }
 
@@ -857,7 +850,6 @@ void ControlManagerNode::tmrDiagnostics() {
     calculate_rmse_ = false;
   }
 
-  diagnostics_.header.stamp    = get_clock()->now();
   diagnostics_.header.frame_id = "";
 
   pub_diagnostics_->publish(diagnostics_);

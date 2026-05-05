@@ -35,7 +35,7 @@
      <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="1.468233" left="0.000000" right="210.669566" top="1.616371"/>
+        <range bottom="1.468233" left="0.000000" right="206.969508" top="1.616371"/>
         <limitY/>
         <curve color="#d62728" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/z"/>
         <curve color="#bcbd22" name="/uav1/estimation_manager/estimation/pose/pose/position/z"/>
@@ -43,7 +43,7 @@
       </DockArea>
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="0.004971" left="0.000000" right="210.669318" top="0.169663"/>
+        <range bottom="0.004971" left="0.000000" right="206.969154" top="0.169663"/>
         <limitY/>
         <curve color="#1f77b4" name="/uav1/control_manager/diagnostics/current_norm_speed"/>
        </plot>
@@ -57,7 +57,7 @@
     <DockSplitter count="3" orientation="-" sizes="0.332978;0.334045;0.332978">
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.092034" left="0.000000" right="210.669566" top="0.051436"/>
+       <range bottom="-0.092034" left="0.000000" right="206.969508" top="0.051436"/>
        <limitY/>
        <curve color="#ff7f0e" name="/uav1/estimation_manager/estimation/twist/twist/linear/x"/>
        <curve color="#17becf" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/x"/>
@@ -65,7 +65,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.064241" left="0.000000" right="210.669566" top="0.067996"/>
+       <range bottom="-0.064241" left="0.000000" right="206.969508" top="0.067996"/>
        <limitY/>
        <curve color="#f14cc1" name="/uav1/estimation_manager/estimation/twist/twist/linear/y"/>
        <curve color="#bcbd22" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/y"/>
@@ -73,7 +73,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.162714" left="0.000000" right="210.669566" top="0.045555"/>
+       <range bottom="-0.162714" left="0.000000" right="206.969508" top="0.045555"/>
        <limitY/>
        <curve color="#9467bd" name="/uav1/estimation_manager/estimation/twist/twist/linear/z"/>
        <curve color="#1f77b4" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/z"/>
@@ -87,7 +87,7 @@
     <DockSplitter count="4" orientation="-" sizes="0.25;0.25;0.25;0.25">
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="0.999363" left="0.000000" right="210.669566" top="1.000016"/>
+       <range bottom="0.999363" left="0.000000" right="206.969508" top="1.000016"/>
        <limitY/>
        <curve color="#d62728" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/w"/>
        <curve color="#9467bd" name="/uav1/estimation_manager/estimation/pose/pose/orientation/w"/>
@@ -95,7 +95,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.000407" left="0.000000" right="210.669566" top="0.016695"/>
+       <range bottom="-0.000407" left="0.000000" right="206.969508" top="0.016695"/>
        <limitY/>
        <curve color="#1ac938" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/x"/>
        <curve color="#17becf" name="/uav1/estimation_manager/estimation/pose/pose/orientation/x"/>
@@ -103,7 +103,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.035199" left="0.000000" right="210.669566" top="0.000859"/>
+       <range bottom="-0.035199" left="0.000000" right="206.969508" top="0.000859"/>
        <limitY/>
        <curve color="#ff7f0e" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/y"/>
        <curve color="#bcbd22" name="/uav1/estimation_manager/estimation/pose/pose/orientation/y"/>
@@ -111,7 +111,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.006560" left="0.000000" right="210.669566" top="0.013410"/>
+       <range bottom="-0.006560" left="0.000000" right="206.969508" top="0.013410"/>
        <limitY/>
        <curve color="#f14cc1" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/z"/>
        <curve color="#1f77b4" name="/uav1/estimation_manager/estimation/pose/pose/orientation/z"/>
@@ -125,7 +125,7 @@
     <DockSplitter count="3" orientation="-" sizes="0.332978;0.334045;0.332978">
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.030124" left="0.000000" right="210.669566" top="0.030687"/>
+       <range bottom="-0.030124" left="0.000000" right="206.969508" top="0.030687"/>
        <limitY/>
        <curve color="#d62728" name="/uav1/estimation_manager/estimation/twist/twist/angular/x"/>
        <curve color="#f14cc1" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/x"/>
@@ -133,7 +133,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.027918" left="0.000000" right="210.669566" top="0.030933"/>
+       <range bottom="-0.027918" left="0.000000" right="206.969508" top="0.030933"/>
        <limitY/>
        <curve color="#1ac938" name="/uav1/estimation_manager/estimation/twist/twist/angular/y"/>
        <curve color="#9467bd" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/y"/>
@@ -141,7 +141,7 @@
      </DockArea>
      <DockArea name="...">
       <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-       <range bottom="-0.017218" left="0.000000" right="210.669566" top="0.015423"/>
+       <range bottom="-0.015416" left="0.000000" right="206.969508" top="0.015379"/>
        <limitY/>
        <curve color="#ff7f0e" name="/uav1/estimation_manager/estimation/twist/twist/angular/z"/>
        <curve color="#17becf" name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/z"/>
@@ -156,7 +156,7 @@
      <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="3.936274" left="0.000000" right="210.669318" top="4.697389"/>
+        <range bottom="3.938141" left="0.000000" right="206.969154" top="4.620850"/>
         <limitY/>
         <curve color="#9467bd" name="/uav1/control_manager/diagnostics/last_control_input/data[2]"/>
         <curve color="#d62728" name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[2]"/>
@@ -164,7 +164,7 @@
       </DockArea>
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="3.898373" left="0.000000" right="210.669318" top="4.650699"/>
+        <range bottom="3.968691" left="0.000000" right="206.969154" top="4.648984"/>
         <limitY/>
         <curve color="#ff7f0e" name="/uav1/control_manager/diagnostics/last_control_input/data[0]"/>
         <curve color="#bcbd22" name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[0]"/>
@@ -174,7 +174,7 @@
      <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="3.935313" left="0.000000" right="210.669318" top="4.648484"/>
+        <range bottom="3.976480" left="0.000000" right="206.969154" top="4.647480"/>
         <limitY/>
         <curve color="#f14cc1" name="/uav1/control_manager/diagnostics/last_control_input/data[1]"/>
         <curve color="#1f77b4" name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[1]"/>
@@ -182,7 +182,7 @@
       </DockArea>
       <DockArea name="...">
        <plot flip_y="false" line_width="1.0" mode="TimeSeries" flip_x="false">
-        <range bottom="3.944603" left="0.000000" right="210.669318" top="4.685857"/>
+        <range bottom="3.945956" left="0.000000" right="206.969154" top="4.630388"/>
         <limitY/>
         <curve color="#17becf" name="/uav1/control_manager/diagnostics/last_control_input/data[3]"/>
         <curve color="#1ac938" name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[3]"/>
