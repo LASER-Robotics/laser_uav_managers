@@ -143,7 +143,6 @@ CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State &) {
   odometry_openvins_sub_.reset();
   control_sub_.reset();
   timer_.reset();
-  motor_sub_.reset();
   diagnostics_timer_.reset();
 
   return CallbackReturn::SUCCESS;
@@ -255,8 +254,6 @@ void EstimationManager::configPubSub() {
                                                                         std::bind(&EstimationManager::odometryOpenVinsCallback, this, std::placeholders::_1));
   control_sub_           = create_subscription<laser_msgs::msg::UavControlDiagnostics>("control_in", 10,
                                                                              std::bind(&EstimationManager::controlCallback, this, std::placeholders::_1));
-  motor_sub_             = create_subscription<laser_msgs::msg::MotorSpeedStamped>("motor_speed_in", 10,
-                                                                       std::bind(&EstimationManager::motorSpeedCallback, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "Publishers and subscribers configured.");
 }
@@ -366,42 +363,10 @@ void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnos
   std::lock_guard<std::mutex> lock(control_data_.mtx);
   control_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 5000, "Received control message at time %.3f s, frequency: %.2f Hz",
-      msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+      get_logger(), *get_clock(), 5000, "Received control message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
       ((control_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp)).seconds()) : 0.0));
   control_data_.last_msg = msg;
   mekf_->set_mass(msg->estimated_mass);
-}
-//}
-
-/* motorSpeedCallback() //{ */
-void EstimationManager::motorSpeedCallback(const laser_msgs::msg::MotorSpeedStamped::SharedPtr msg) {
-  std::lock_guard<std::mutex> lock(motor_speed_data_.mtx);
-  motor_speed_data_.buffer[msg->header.stamp] = msg;
-  // RCLCPP_DEBUG_THROTTLE(
-  //    get_logger(), *get_clock(), 10000, "Received motor speed message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec
-  //    * 1e-9,
-  //     ((motor_speed_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(motor_speed_data_.last_msg->header.stamp)).seconds())
-  //                                              : 0.0));
-
-  // std::cout << "Motor speeds (RPM): ";
-  // for (const auto &speed : msg->data.data) {
-  //   std::cout << speed << " ";
-  // }
-  // std::cout << std::endl;
-
-  for (size_t i = 0; i < msg->data.data.size(); i++) {
-    msg->data.data[i] = (msg->data.data[i] * msg->data.data[i]) * thrust_coefficient_;
-  }
-  // std::cout << "Coeficient Thrust: " << thrust_coefficient_ << std::endl;
-
-  // std::cout << "Motor thrusts (N): ";
-  // for (const auto &thrust : msg->data.data) {
-  //   std::cout << thrust << " ";
-  // }
-  // std::cout << std::endl;
-
-  motor_speed_data_.last_msg = msg;
 }
 //}
 
@@ -668,7 +633,7 @@ void EstimationManager::timerCallback() {
     if (control_msg) {
       if (!is_first_control_msg_) {
         last_control_input_time_ = rclcpp::Time(control_msg->header.stamp);
-        is_first_control_msg_     = true;
+        is_first_control_msg_    = true;
         return;
       } else {
         rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
@@ -707,8 +672,8 @@ void EstimationManager::timerCallback() {
           if (can_predict) {
             mekf_->predict(control_input, dt_sec);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
-            has_prediction = true;
-            is_predicted_  = true;
+            has_prediction     = true;
+            is_predicted_      = true;
           }
         }
       }
@@ -716,19 +681,20 @@ void EstimationManager::timerCallback() {
 
 
     bool has_measurement{false};
-
-    if (px4_odom_msg && enable_px4_odom_) {
-      has_measurement = true;
-      mekf_->correct(*px4_odom_msg);
-      last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
-    } else if (openvins_odom_msg && enable_openvins_odom_) {
-      has_measurement = true;
-      mekf_->correct(*openvins_odom_msg);
-      last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
-    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
-      has_measurement = true;
-      mekf_->correct(*fast_lio_odom_msg);
-      last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
+    if (is_predicted_) {
+      if (px4_odom_msg && enable_px4_odom_) {
+        has_measurement = true;
+        mekf_->correct(*px4_odom_msg);
+        last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
+      } else if (openvins_odom_msg && enable_openvins_odom_) {
+        has_measurement = true;
+        mekf_->correct(*openvins_odom_msg);
+        last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
+      } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+        has_measurement = true;
+        mekf_->correct(*fast_lio_odom_msg);
+        last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
+      }
     }
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
@@ -736,7 +702,7 @@ void EstimationManager::timerCallback() {
       is_ekf_active_ = true;
     } else if (enable_openvins_odom_ && !openvins_odom_data_.last_msg) {
       if (px4_odom_data_.last_msg) {
-        auto msg = px4_odom_data_.last_msg;
+        auto msg          = px4_odom_data_.last_msg;
         msg->header.stamp = this->get_clock()->now();
         odom_pub_->publish(*msg);
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "OpenVins waiting for data... using PX4 fallback.");
@@ -836,7 +802,7 @@ void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav
 
     geometry_msgs::msg::TransformStamped dynamic_tf;
     dynamic_tf.header.stamp    = pub_time;
-    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";      
+    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";
     dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";
     dynamic_tf.transform       = tf2::toMsg(tf_inv);
 
