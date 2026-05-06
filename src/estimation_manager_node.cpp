@@ -631,6 +631,8 @@ void EstimationManager::timerCallback() {
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
 
     if (control_msg) {
+      RCLCPP_INFO_ONCE(get_logger(), "Running Prediction with Control Manager Thrust.");
+
       if (!is_first_control_msg_) {
         last_control_input_time_ = rclcpp::Time(control_msg->header.stamp);
         is_first_control_msg_    = true;
@@ -677,8 +679,16 @@ void EstimationManager::timerCallback() {
           }
         }
       }
-    }
+    } else {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Running Prediction with Hover Thrust Setpoint. Waiting for Control Input From Control Manager.");
 
+      const Eigen::Vector4d control_input(Eigen::Vector4d::Constant((9.81 * mekf_->get_mass()) / 4));
+
+      mekf_->predict(control_input, 0.01);
+      rclcpp::Time stamp = this->get_clock()->now();
+      has_prediction     = true;
+      is_predicted_      = true;
+    }
 
     bool has_measurement{false};
     if (is_predicted_) {
