@@ -10,10 +10,12 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # Declare commands
-    refactor_plotjuggler_config_cmd = ExecuteProcess(
-        cmd=[PathJoinSubstitution([FindPackageShare('laser_uav_managers'),
-                                  'scripts', 'refactor_plotjuggler_config.sh'])],
-        output='screen')
+    refactor_plotjuggler_node = Node(
+        package='laser_uav_managers',
+        executable='refactor_plotjuggler_config.sh',
+        name='refactor_plotjuggler_config',
+        output='screen',
+    )
 
     # Declare nodes
     plotjuggler_node = Node(
@@ -24,4 +26,4 @@ def generate_launch_description():
         arguments=['-l /tmp/eval_control_layout.xml'],
         prefix=["bash -c 'sleep 2; $0 $@'"])
 
-    return LaunchDescription([refactor_plotjuggler_config_cmd, plotjuggler_node])
+    return LaunchDescription([refactor_plotjuggler_node, plotjuggler_node])

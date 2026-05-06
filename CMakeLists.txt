@@ -151,8 +151,12 @@ install(DIRECTORY
   launch
   params
   plotjuggler
-  scripts
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/refactor_plotjuggler_config.sh
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
