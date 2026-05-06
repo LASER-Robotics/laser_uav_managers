@@ -146,10 +146,10 @@ private:
   std::vector<double>                   _motor_b_;
   std::vector<laser_uav_lib::IIRFilter> btw_motors_;
 
-  Eigen::VectorXd nmpc_control_input_;
-  Eigen::VectorXd motor_speed_estimated_;
-  Eigen::Vector3d last_angular_speed_;
-  Eigen::Vector3d angular_acceleration_estimated_;
+  std::pair<Eigen::Vector3d, Eigen::VectorXd> nmpc_solution_;
+  Eigen::VectorXd                             motor_speed_estimated_;
+  Eigen::Vector3d                             last_angular_speed_;
+  Eigen::Vector3d                             angular_acceleration_estimated_;
 
   rclcpp::Time mass_estimation_time_start_;
   double       estimated_mass_;
@@ -175,7 +175,7 @@ private:
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
-  bool have_nmpc_control_input_{false};
+  bool have_nmpc_solution_{false};
   bool requested_takeoff_{false};
   bool takeoff_done_{false};
   bool requested_land_{false};
