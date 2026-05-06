@@ -166,8 +166,6 @@ private:
 
   double land_start_rampdown_;
 
-  double mission_start_time_;
-
   laser_uav_lib::RMSE estimated_rmse_;
 
   bool stop_on_waypoints_{false};
