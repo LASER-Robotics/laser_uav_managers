@@ -433,7 +433,7 @@ void ControlManagerNode::checkSafeArea() {
 
 
     emergency_hover_reference.heading = quaternionToHeading(odometry_.pose.pose.orientation);
-    agile_planner_.generateTrajectory(odometry_, emergency_hover_reference, 0.0, false);
+    agile_planner_.generateTrajectory(last_waypoint_, emergency_hover_reference, 0.0, false);
     emergency_hover_ = true;
   }
 }
@@ -525,14 +525,35 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
   }
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
-    agile_planner_.generateTrajectory(odometry_, msg.waypoints, msg.speed);
+    int  count_not_deviation = 0;
+    bool valid_deviation     = false;
+    for (auto i = 0; i < msg.waypoints.size(); i++) {
+      if (valid_deviation) {
+        break;
+      }
+
+      if (euclideanDistance(odometry_.pose.pose.position, msg.waypoints[i].position) < 0.1) {
+        count_not_deviation++;
+      } else {
+        valid_deviation = true;
+      }
+    }
+
+    if (count_not_deviation == msg.waypoints.size()) {
+      RCLCPP_WARN(this->get_logger(), "Trajectory will not executed, because dont have any point with deviation more bigger than 0.1m.");
+    } else if (count_not_deviation > 0) {
+      RCLCPP_WARN(this->get_logger(), "Points with deviation smaller tan 0.1 filtered and removed from the trajectory called. Quantity Points: %d",
+                  count_not_deviation);
+    }
+
+    agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
     stop_on_waypoints_ = msg.stop_on_waypoints;
     desired_path_      = msg.waypoints;
     emergency_hover_   = false;
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
-    RCLCPP_WARN(this->get_logger(), "Trajectory not will executed, because the uav is not flying.");
+    RCLCPP_WARN(this->get_logger(), "Trajectory will not executed, because the uav is not flying.");
   }
 }
 //}
@@ -544,13 +565,17 @@ void ControlManagerNode::subGoto(const laser_msgs::msg::PoseWithHeading &msg) {
   }
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
-    agile_planner_.generateTrajectory(odometry_, msg, 0.0, false);
-    stop_on_waypoints_ = false;
-    emergency_hover_   = false;
-    RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
-    diagnostics_.have_goal = true;
+    if (euclideanDistance(odometry_.pose.pose.position, msg.position) < 0.1) {
+      RCLCPP_WARN(this->get_logger(), "GOTO's Point will not executed, because the uav alerady is at this point.");
+    } else {
+      agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
+      stop_on_waypoints_ = false;
+      emergency_hover_   = false;
+      RCLCPP_INFO(this->get_logger(), "GOTO's Point Received!");
+      diagnostics_.have_goal = true;
+    }
   } else {
-    RCLCPP_WARN(this->get_logger(), "GOTO's Point not will executed, because the uav is not flying.");
+    RCLCPP_WARN(this->get_logger(), "GOTO's Point will not executed, because the uav is not flying.");
   }
 }
 //}
@@ -562,26 +587,27 @@ void ControlManagerNode::subGotoRelative(const laser_msgs::msg::PoseWithHeading 
   }
 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
-    tf2::Transform world_to_body_tf;
-    tf2::Vector3   aux;
-
-    tf2::fromMsg(odometry_.pose.pose, world_to_body_tf);
-    tf2::fromMsg(msg.position, aux);
+    Eigen::Quaterniond q(last_waypoint_.pose.orientation.w, last_waypoint_.pose.orientation.x, last_waypoint_.pose.orientation.y,
+                         last_waypoint_.pose.orientation.z);
+    q.normalize();
+    Eigen::Vector3d aux;
+    aux << msg.position.x, msg.position.y, msg.position.z;
 
     laser_msgs::msg::PoseWithHeading world_point;
-    aux                    = world_to_body_tf * aux;
-    world_point.position.x = aux.x();
-    world_point.position.y = aux.y();
-    world_point.position.z = aux.z();
-    world_point.heading    = quaternionToHeading(odometry_.pose.pose.orientation) + msg.heading;
+    aux = q * aux;
+    std::cout << aux << std::endl;
+    world_point.position.x = last_waypoint_.pose.position.x + aux(0);
+    world_point.position.y = last_waypoint_.pose.position.y + aux(1);
+    world_point.position.z = last_waypoint_.pose.position.z + aux(2);
+    world_point.heading    = quaternionToHeading(last_waypoint_.pose.orientation) + msg.heading;
 
-    agile_planner_.generateTrajectory(odometry_, world_point, 0.0, false);
+    agile_planner_.generateTrajectory(last_waypoint_, world_point, 0.0, false);
     stop_on_waypoints_ = false;
     emergency_hover_   = false;
     RCLCPP_INFO(this->get_logger(), "GOTO's Relative Point Received!");
     diagnostics_.have_goal = true;
   } else {
-    RCLCPP_WARN(this->get_logger(), "GOTO's Relative Point not will executed, because the uav is not flying.");
+    RCLCPP_WARN(this->get_logger(), "GOTO's Relative Point will not executed, because the uav is not flying.");
   }
 }
 //}
@@ -614,7 +640,7 @@ void ControlManagerNode::srvTakeoff([[maybe_unused]] const std::shared_ptr<std_s
     takeoff_waypoint.position.z = _takeoff_height_;
     takeoff_waypoint.heading    = quaternionToHeading(odometry_.pose.pose.orientation);
 
-    agile_planner_.generateTrajectory(odometry_, takeoff_waypoint, _takeoff_speed_, true);
+    agile_planner_.generateTrajectory(last_waypoint_, takeoff_waypoint, _takeoff_speed_, true);
 
     land_done_             = false;
     diagnostics_.have_goal = true;
@@ -644,7 +670,7 @@ void ControlManagerNode::srvLand([[maybe_unused]] const std::shared_ptr<std_srvs
     land_waypoint.position.z = -1.0;
     land_waypoint.heading    = quaternionToHeading(odometry_.pose.pose.orientation);
 
-    agile_planner_.generateTrajectory(odometry_, land_waypoint, _land_speed_, true);
+    agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, _land_speed_, true);
 
     takeoff_done_          = false;
     diagnostics_.have_goal = true;
@@ -705,7 +731,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
   }
 
   if (stop_on_waypoints_ && desired_path_.size() > 0 &&
-      (euclideanDistance(last_waypoint_.pose.position, desired_path_[0].position) < 0.1 &&
+      (euclideanDistance(odometry_.pose.pose.position, desired_path_[0].position) < 0.1 &&
        std::abs(quaternionToHeading(last_waypoint_.pose.orientation) - normalizeHeading(desired_path_[0].heading)) < 0.1)) {
     if (euclideanDistance(odometry_.pose.pose.position, desired_path_[0].position) < 0.15 && checkHeadingError() < 0.2) {
       lock_waypoint_++;
@@ -788,7 +814,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       land_waypoint.heading  = quaternionToHeading(odometry_.pose.pose.orientation);
       land_waypoint.position.z += -1.0;
 
-      agile_planner_.generateTrajectory(odometry_, land_waypoint, _land_speed_, true);
+      agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, _land_speed_, true);
     }
   }
 

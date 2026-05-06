@@ -28,9 +28,6 @@
 #include <laser_uav_controllers/nmpc_controller.hpp>
 #include <laser_uav_controllers/indi_controller.hpp>
 
-#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
-#include "tf2/LinearMath/Transform.h"
-
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
 namespace laser_uav_managers
