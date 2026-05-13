@@ -746,6 +746,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
     last_waypoint_.use_individual_thrust = false;
 
     nmpc_solution_            = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
+    diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
   } else {
     current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1, this->get_clock()->now().seconds());
@@ -757,6 +758,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
     diagnostics_.reference_horizon = current_horizon_path_;
     nmpc_solution_                 = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
+    diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp      = get_clock()->now();
   }
   have_nmpc_solution_ = true;
