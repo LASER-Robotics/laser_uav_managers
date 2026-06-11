@@ -23,6 +23,16 @@ def generate_launch_description():
     uav_name = os.environ['UAV_NAME']
     uav_type = os.environ['UAV_TYPE']
     
+    uav_neighbor = None # Inicializar a variável evita erros mais para frente
+    
+    if uav_name == "uav1":
+        uav_neighbor = "uav2"
+    
+    if uav_name == "uav2":
+        uav_neighbor = "uav1"
+
+    print(uav_neighbor)
+    
     defaults_uavs = ["x500", "lr7pro"]
 
     if uav_name == "":
@@ -90,6 +100,8 @@ def generate_launch_description():
         parameters=[control_manager_file, uav_parameters_file, agile_planner_file, nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[
             ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/odometry_gps_in', '/' + uav_name + '/ground_truth'),
+            ('/' + uav_name + '/odometry_neighbor_gps_in', '/' + uav_name + '/neighbor_odom'),
             ('/' + uav_name + '/motor_speed_estimation_in', '/' + uav_name + '/hw_api/motor_speed_estimated'),
             ('/' + uav_name + '/imu_in', '/' + uav_name + '/px4_api/imu'),
             ('/' + uav_name + '/motor_speed_reference_out', '/' + uav_name + '/control_manager/motor_speed_reference'),

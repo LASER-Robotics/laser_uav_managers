@@ -6,9 +6,13 @@
       diagnostics: 100.0
 
     takeoff:
-      height: 1.5 # m
+      height: 5.0 # m
       speed: 1.0 # m/s
 
+    drone_avoidance:
+      time_window: 0.5 # s
+      r_colision: 2.5 # m
+    
     land:
       increment_rampdown: 0.15 # [0, 1]
       threshold_detect: 0.90 # [0, 1]
