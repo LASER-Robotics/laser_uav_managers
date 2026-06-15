@@ -63,6 +63,7 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
 
   declare_parameter("drone_avoidance.time_window", rclcpp::ParameterValue(1.0));
   declare_parameter("drone_avoidance.r_colision", rclcpp::ParameterValue(3.0));
+  declare_parameter("drone_avoidance.r_local_neighbor", rclcpp::ParameterValue(10.0));
 
   declare_parameter("nmpc_controller.nmpc_mode", rclcpp::ParameterValue(""));
   declare_parameter("nmpc_controller.N", rclcpp::ParameterValue(0));
@@ -254,6 +255,7 @@ void ControlManagerNode::getParameters() {
 
   get_parameter("drone_avoidance.time_window", _time_window_);
   get_parameter("drone_avoidance.r_colision", _r_colision_);
+  get_parameter("drone_avoidance.r_local_neighbor", _r_local_neighbor_);
 
   get_parameter("nmpc_controller.nmpc_mode", _acados_params_.nmpc_mode);
   if (_acados_params_.nmpc_mode == "individual_thrust") {
@@ -732,13 +734,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
   std::vector<double> tv_m_nmpc_array(5, 0.0);
 
   Eigen::Vector3d pos_gps(odometry_gps_.pose.pose.position.x, odometry_gps_.pose.pose.position.y, odometry_gps_.pose.pose.position.z);
-
-  Eigen::Quaterniond q_gps(odometry_gps_.pose.pose.orientation.w, odometry_gps_.pose.pose.orientation.x, odometry_gps_.pose.pose.orientation.y,
-                           odometry_gps_.pose.pose.orientation.z);
-  q_gps.normalize();
-
-  Eigen::Vector3d v_raw_body(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
-  Eigen::Vector3d v_gps = q_gps.toRotationMatrix() * v_raw_body;
+  Eigen::Vector3d v_gps(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
 
   int drone_i = 0;
 
@@ -748,12 +744,9 @@ void ControlManagerNode::tmrExternalLoopControl() {
     }
 
     Eigen::Vector3d    pos_neighbor(uav.pose.position.x, uav.pose.position.y, uav.pose.position.z);
-    Eigen::Quaterniond q_neighbor(uav.pose.orientation.w, uav.pose.orientation.x, uav.pose.orientation.y, uav.pose.orientation.z);
-    q_neighbor.normalize();
-
     Eigen::Vector3d v_neighbor(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
-    /* Eigen::Vector3d v_raw_neighbor(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z); */
-    /* Eigen::Vector3d v_neighbor = q_neighbor.toRotationMatrix() * v_raw_neighbor; */
+
+    /* p_relative_gps.squaredNorm() */
 
     Eigen::Vector3d p_relativo_gps = pos_neighbor - pos_gps;
     Eigen::Vector3d relative_v_gps = v_gps - v_neighbor;

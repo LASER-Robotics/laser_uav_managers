@@ -165,6 +165,7 @@ private:
 
   double _time_window_;
   double _r_colision_;
+  double _r_local_neighbor_;
 
   int lock_waypoint_;
 
