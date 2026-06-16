@@ -11,7 +11,7 @@
 
     drone_avoidance:
       time_window: 0.5 # s
-      r_colision: 2.5 # m
+      r_colision: 3.0 # m
       r_local_neighbor: 10.0 # m
     
     land:
