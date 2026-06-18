@@ -78,6 +78,9 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
 
   last_angular_speed_             = Eigen::Vector3d::Zero();
   angular_acceleration_estimated_ = Eigen::Vector3d::Zero();
+
+  diagnostics_.metrics.rmse = NAN;
+  diagnostics_.metrics.std  = NAN;
 }
 //}
 
@@ -720,6 +723,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       lock_control_inputs_ = true;
     }
 
+    diagnostics_.current_control_rampdown = land_start_rampdown_;
     land_start_rampdown_ -= _land_increment_rampdown_;
 
     if (land_start_rampdown_ < 0.0) {
@@ -728,6 +732,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
     diagnostics_.control_iteration_duration_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start_iteration).count();
     return;
+  } else {
+    diagnostics_.current_control_rampdown = NAN;
   }
 
   if (stop_on_waypoints_ && desired_path_.size() > 0 &&
@@ -745,9 +751,9 @@ void ControlManagerNode::tmrExternalLoopControl() {
     last_waypoint_.use_angular_velocity  = false;
     last_waypoint_.use_individual_thrust = false;
 
-    nmpc_solution_            = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
+    nmpc_solution_                   = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
-    diagnostics_.header.stamp = get_clock()->now();
+    diagnostics_.header.stamp        = get_clock()->now();
   } else {
     current_horizon_path_ = agile_planner_.getTrajectory(_acados_params_.N + 1, this->get_clock()->now().seconds());
     if (_safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
@@ -756,10 +762,10 @@ void ControlManagerNode::tmrExternalLoopControl() {
     last_waypoint_ = current_horizon_path_[0];
     lock_waypoint_ = 0;
 
-    diagnostics_.reference_horizon = current_horizon_path_;
-    nmpc_solution_                 = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
+    diagnostics_.reference_horizon   = current_horizon_path_;
+    nmpc_solution_                   = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
-    diagnostics_.header.stamp      = get_clock()->now();
+    diagnostics_.header.stamp        = get_clock()->now();
   }
   have_nmpc_solution_ = true;
 
@@ -767,8 +773,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
     estimated_rmse_.pushEstimated(odometry_.pose.pose.position);
     estimated_rmse_.pushReference(last_waypoint_.pose.position);
 
-    diagnostics_.metrics.rmse = -1.0;
-    diagnostics_.metrics.std  = -1.0;
+    diagnostics_.metrics.rmse = NAN;
+    diagnostics_.metrics.std  = NAN;
   }
 
   if (angular_rates_and_thrust_mode_) {
