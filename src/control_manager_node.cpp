@@ -806,7 +806,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   if (requested_land_) {
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2500, "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
-    if (estimated_mass_for_detect_landing_ <= estimated_mass_ * _land_threshold_detect_ && agile_planner_.isHover()) {
+    if (estimated_mass_for_detect_landing_ <= estimated_mass_ * _land_threshold_detect_) {
       requested_land_        = false;
       land_done_             = true;
       diagnostics_.have_goal = false;
