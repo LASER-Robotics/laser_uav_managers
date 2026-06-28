@@ -25,7 +25,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>  // Importante para o toMsg
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/LinearMath/Transform.h>
 
 /*//}*/
@@ -94,14 +94,10 @@ private:
 
   void diagnosticsTimerCallback();
 
-  void set_verbosity(const std::string &verbosity);
+  void setOdometryCallback(const std::shared_ptr<laser_msgs::srv::SetString::Request> request, std::shared_ptr<laser_msgs::srv::SetString::Response> response);
   /*//}*/
 
-  void setOdometryCallback(const std::shared_ptr<laser_msgs::srv::SetString::Request> request, std::shared_ptr<laser_msgs::srv::SetString::Response> response);
-
-
   rclcpp::Service<laser_msgs::srv::SetString>::SharedPtr set_odometry_service_;
-
 
   /* FUNCTIONS //{ */
   void setupEKF();
@@ -113,6 +109,8 @@ private:
 
   template <typename MsgT>
   void pruneSensorBuffer(const rclcpp::Time &now, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name);
+
+  void set_verbosity(const std::string &verbosity);
   /*//}*/
 
   /* EKF //{ */
@@ -121,7 +119,6 @@ private:
 
   /* ROS COMMUNICATIONS //{ */
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr                       odom_pub_;
-  rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr                       predict_pub_;
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::EstimationManagerDiagnostics>::SharedPtr diagnostics_pub_;
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr                odometry_px4_sub_;
@@ -156,12 +153,12 @@ private:
   laser_msgs::msg::UavControlDiagnostics::SharedPtr last_control_msg_;
   sensor_msgs::msg::Range::SharedPtr                last_garmin_range_msg_;
 
-  bool is_prediction{false};
+  bool is_predicted_{false};
   bool is_active_{false};
   bool is_ekf_active_{false};
   bool is_control_input_{false};
   bool is_initialized_{false};
-  bool is_first_control_msg{false};
+  bool is_first_control_msg_{false};
   bool enable_px4_odom_{false};
   bool enable_openvins_odom_{false};
   bool enable_fast_lio_odom_{false};
@@ -208,6 +205,11 @@ private:
   double garmin_covariance_;
 
 
+  double imu_tolerance_;
+  double imu_timeout_;
+  double imu_covariance_;
+  double control_tolerance_;
+  double control_timeout_;
   /*//}*/
 };
 }  // namespace laser_uav_managers

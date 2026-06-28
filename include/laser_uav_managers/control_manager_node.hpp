@@ -22,6 +22,7 @@
 #include <laser_msgs/msg/motor_speed.hpp>
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
+#include <laser_uav_lib/metrics/rmse.hpp>
 
 #include <laser_uav_planners/agile_planner.hpp>
 #include <laser_uav_controllers/nmpc_controller.hpp>
@@ -66,9 +67,12 @@ private:
   void   configTimers();
   void   configServices();
   void   configClasses();
+  double euclideanDistance(geometry_msgs::msg::Point p1, geometry_msgs::msg::Point p2);
   double checkHeadingError();
-  double quaternionToHeading(const Eigen::Quaterniond &q);
+  double normalizeHeading(double heading);
+  double quaternionToHeading(geometry_msgs::msg::Quaternion &q);
   void   checkSafeArea();
+  bool   estimateMass();
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
@@ -81,6 +85,9 @@ private:
 
   rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
   void                                                                   subGoto(const laser_msgs::msg::PoseWithHeading &msg);
+
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_relative_;
+  void                                                                   subGotoRelative(const laser_msgs::msg::PoseWithHeading &msg);
 
   rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
   void                                                                  subTrajectoryPath(const laser_msgs::msg::TrajectoryPath &msg);
@@ -115,11 +122,11 @@ private:
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState>  current_horizon_path_;
 
-  laser_uav_planners::quadrotor_t  _planner_quadrotor_params_;
+  laser_uav_planners::multirotor_t _planner_multirotor_params_;
   laser_uav_planners::pmm_t        _pmm_params_;
   laser_uav_planners::AgilePlanner agile_planner_;
 
-  laser_uav_controllers::quadrotor_t    _controller_quadrotor_params_;
+  laser_uav_controllers::multirotor_t   _controller_multirotor_params_;
   laser_uav_controllers::acados_t       _acados_params_;
   laser_uav_controllers::NmpcController nmpc_controller_;
   laser_uav_controllers::IndiController indi_controller_;
@@ -136,15 +143,16 @@ private:
   std::vector<double>                   _motor_b_;
   std::vector<laser_uav_lib::IIRFilter> btw_motors_;
 
-  Eigen::VectorXd nmpc_control_input_;
-  Eigen::VectorXd motor_speed_estimated_;
-  Eigen::Vector3d last_angular_speed_;
-  Eigen::Vector3d angular_acceleration_estimated_;
+  std::pair<Eigen::Vector3d, Eigen::VectorXd> nmpc_solution_;
+  Eigen::VectorXd                             motor_speed_estimated_;
+  Eigen::Vector3d                             last_angular_speed_;
+  Eigen::Vector3d                             angular_acceleration_estimated_;
 
-  double estimated_mass_for_detect_landing_;
+  rclcpp::Time mass_estimation_time_start_;
+  double       estimated_mass_;
+  double       estimated_mass_for_detect_landing_;
 
-  int  lock_waypoint_;
-  bool _agile_fly_;
+  int lock_waypoint_;
 
   double _takeoff_height_;
   double _takeoff_speed_;
@@ -155,11 +163,16 @@ private:
 
   double land_start_rampdown_;
 
+  laser_uav_lib::RMSE estimated_rmse_;
+
+  bool stop_on_waypoints_{false};
   bool emergency_hover_{false};
+  bool calculate_rmse_{false};
+  bool start_mass_estimation_{false};
   bool received_first_odometry_msg_{false};
   bool angular_rates_and_thrust_mode_;
   bool lock_control_inputs_{true};
-  bool have_nmpc_control_input_{false};
+  bool have_nmpc_solution_{false};
   bool requested_takeoff_{false};
   bool takeoff_done_{false};
   bool requested_land_{false};

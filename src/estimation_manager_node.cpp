@@ -114,7 +114,6 @@ CallbackReturn EstimationManager::on_configure(const rclcpp_lifecycle::State &) 
 CallbackReturn EstimationManager::on_activate(const rclcpp_lifecycle::State &) {
   RCLCPP_INFO(get_logger(), "Activating EstimationManager...");
   odom_pub_->on_activate();
-  predict_pub_->on_activate();
   diagnostics_pub_->on_activate();
 
   is_active_ = true;
@@ -131,7 +130,6 @@ CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State &)
   timer_->cancel();
   diagnostics_timer_->cancel();
   odom_pub_->on_deactivate();
-  predict_pub_->on_deactivate();
   diagnostics_pub_->on_deactivate();
   return CallbackReturn::SUCCESS;
 }
@@ -141,7 +139,6 @@ CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State &)
 CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State &) {
   RCLCPP_INFO(get_logger(), "Cleaning up EstimationManager...");
   odom_pub_.reset();
-  predict_pub_.reset();
   diagnostics_pub_.reset();
   odometry_px4_sub_.reset();
   odometry_fast_lio_sub_.reset();
@@ -263,7 +260,6 @@ void EstimationManager::getParameters() {
 void EstimationManager::configPubSub() {
   RCLCPP_INFO(get_logger(), "Configuring publishers and subscribers...");
   odom_pub_        = create_publisher<nav_msgs::msg::Odometry>("odometry_out", 10);
-  predict_pub_     = create_publisher<nav_msgs::msg::Odometry>("odometry_predict", 10);
   diagnostics_pub_ = create_publisher<laser_msgs::msg::EstimationManagerDiagnostics>("~/diagnostics", 10);
 
   odometry_px4_sub_ =
@@ -337,13 +333,14 @@ void EstimationManager::setupEKF() {
 
   RCLCPP_INFO(get_logger(), "EKF configured.");
 }
+//}
 
 /* odometryPx4Callback() //{ */
 void EstimationManager::odometryPx4Callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(px4_odom_data_.mtx);
   px4_odom_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 10000, "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz",
+      get_logger(), *get_clock(), 5000, "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz",
       static_cast<double>(msg->header.stamp.sec) + static_cast<double>(msg->header.stamp.nanosec) * 1e-9,
       ((px4_odom_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(px4_odom_data_.last_msg->header.stamp)).seconds()) : 0.0));
   px4_odom_data_.last_msg = msg;
@@ -356,7 +353,7 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
   openvins_odom_data_.buffer[msg->header.stamp] = msg;
   if (enable_openvins_odom_)
     odom_pub_->publish(*msg);
-  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz",
+  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 5000, "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz",
                         msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
                         ((openvins_odom_data_.last_msg != nullptr)
                              ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(openvins_odom_data_.last_msg->header.stamp)).seconds())
@@ -369,7 +366,7 @@ void EstimationManager::odometryOpenVinsCallback(const nav_msgs::msg::Odometry::
 void EstimationManager::odometryFastLioCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
   std::lock_guard<std::mutex> lock(fast_lio_odom_data_.mtx);
   fast_lio_odom_data_.buffer[msg->header.stamp] = msg;
-  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz",
+  RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 5000, "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz",
                         msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
                         ((fast_lio_odom_data_.last_msg != nullptr)
                              ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp)).seconds())
@@ -383,10 +380,10 @@ void EstimationManager::controlCallback(const laser_msgs::msg::UavControlDiagnos
   std::lock_guard<std::mutex> lock(control_data_.mtx);
   control_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 10000, "Received control message at time %.3f s, frequency: %.2f Hz",
-      msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+      get_logger(), *get_clock(), 5000, "Received control message at time %.3f s, frequency: %.2f Hz", msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
       ((control_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp)).seconds()) : 0.0));
   control_data_.last_msg = msg;
+  mekf_->set_mass(msg->estimated_mass);
 }
 //}
 
@@ -644,9 +641,9 @@ void EstimationManager::timerCallback() {
 
     if (enable_px4_odom_ && !px4_odom_data_.is_active) {
       if (!px4_odom_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "PX4 odometry input is inactive.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "PX4 odometry input is inactive.");
       if (!is_ekf_active_) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "EKF is active but no valid measurement inputs are available.");
         return;
       }
     } else {
@@ -657,9 +654,9 @@ void EstimationManager::timerCallback() {
 
     if (enable_fast_lio_odom_ && !fast_lio_odom_data_.is_active) {
       if (!fast_lio_odom_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Fast-LIO odometry input is inactive.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "Fast-LIO odometry input is inactive.");
       if (!is_ekf_active_) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "EKF is active but no valid measurement inputs are available.");
         return;
       }
     } else {
@@ -670,9 +667,9 @@ void EstimationManager::timerCallback() {
 
     if (enable_openvins_odom_ && !openvins_odom_data_.is_active) {
       if (!openvins_odom_data_.is_active)
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "OpenVINS odometry input is inactive.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "OpenVINS odometry input is inactive.");
       if (!is_ekf_active_) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "EKF is active but no valid measurement inputs are available.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "EKF is active but no valid measurement inputs are available.");
       }
     } else {
       if (enable_openvins_odom_) {
@@ -683,9 +680,11 @@ void EstimationManager::timerCallback() {
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
 
     if (control_msg) {
-      if (!is_first_control_msg) {
+      RCLCPP_INFO_ONCE(get_logger(), "Running Prediction with Control Manager Thrust.");
+
+      if (!is_first_control_msg_) {
         last_control_input_time_ = rclcpp::Time(control_msg->header.stamp);
-        is_first_control_msg     = true;
+        is_first_control_msg_    = true;
         return;
       } else {
         rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
@@ -724,14 +723,21 @@ void EstimationManager::timerCallback() {
           if (can_predict) {
             mekf_->predict(control_input, dt_sec);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
-            publishOdometry(predict_pub_, stamp);
-            has_prediction = true;
-            is_prediction  = true;
+            has_prediction     = true;
+            is_predicted_      = true;
           }
         }
       }
-    }
+    } else {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Running Prediction with Hover Thrust Setpoint. Waiting for Control Input From Control Manager.");
 
+      const Eigen::Vector4d control_input(Eigen::Vector4d::Constant((9.81 * mekf_->get_mass()) / 4));
+
+      mekf_->predict(control_input, 0.01);
+      rclcpp::Time stamp = this->get_clock()->now();
+      has_prediction     = true;
+      is_predicted_      = true;
+    }
 
     bool has_measurement{false};
 
@@ -765,15 +771,11 @@ void EstimationManager::timerCallback() {
     }
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
-      // Caso padrão: EKF ativo e OpenVins desligado
       publishOdometry(odom_pub_, last_update_time_);
       is_ekf_active_ = true;
     } else if (enable_openvins_odom_ && !openvins_odom_data_.last_msg) {
-      // OpenVins habilitado, mas ainda sem dados.
-      // Tentamos fazer o "fallback" para o PX4 para não deixar o drone sem odometria.
       if (px4_odom_data_.last_msg) {
-        auto msg = px4_odom_data_.last_msg;
-        // Opcional: Atualizar o timestamp para o agora para evitar TF antiga
+        auto msg          = px4_odom_data_.last_msg;
         msg->header.stamp = this->get_clock()->now();
         odom_pub_->publish(*msg);
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "OpenVins waiting for data... using PX4 fallback.");
@@ -852,43 +854,38 @@ void EstimationManager::diagnosticsTimerCallback() {
 }
 //}
 
+/* publishOdometry() //{ */
 void EstimationManager::publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time) {
   const nav_msgs::msg::Odometry &state = mekf_->get_odometry();
 
-  // 1. Criar a mensagem de Odometria (normal)
   nav_msgs::msg::Odometry odom_out_msg = state;
   odom_out_msg.header.stamp            = pub_time;
   odom_out_msg.header.frame_id         = _uav_name_ + "/odometry";
   odom_out_msg.child_frame_id          = _uav_name_ + "/fcu";
   pub->publish(odom_out_msg);
 
-  // 2. Lógica da Transformada (Seguindo o exemplo que funciona)
   try {
-    // Busca a relação entre o sensor e o drone
-
     Eigen::Quaterniond q_odom(state.pose.pose.orientation.w, state.pose.pose.orientation.x, state.pose.pose.orientation.y, state.pose.pose.orientation.z);
 
-    // Prepara a TF Direta
-    tf2::Transform tf_direta;
-    tf_direta.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
-    tf_direta.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
+    tf2::Transform tf_direct;
+    tf_direct.setOrigin(tf2::Vector3(state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
+    tf_direct.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
 
-    // 3. INVERSÃO (O "pulo do gato" do seu segundo código)
-    tf2::Transform tf_invertida = tf_direta.inverse();
+    tf2::Transform tf_inv = tf_direct.inverse();
 
     geometry_msgs::msg::TransformStamped dynamic_tf;
     dynamic_tf.header.stamp    = pub_time;
-    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";       // O pai vira o FCU
-    dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";  // O filho vira a Odometria
-    dynamic_tf.transform       = tf2::toMsg(tf_invertida);
+    dynamic_tf.header.frame_id = _uav_name_ + "/fcu";
+    dynamic_tf.child_frame_id  = _uav_name_ + "/odometry";
+    dynamic_tf.transform       = tf2::toMsg(tf_inv);
 
     tf_broadcaster_->sendTransform(dynamic_tf);
   }
   catch (const tf2::TransformException &ex) {
-    RCLCPP_WARN(this->get_logger(), "Falha na TF: %s", ex.what());
+    RCLCPP_WARN(this->get_logger(), "Error on TF: %s", ex.what());
   }
 }
-
+//}
 }  // namespace laser_uav_managers
 
 RCLCPP_COMPONENTS_REGISTER_NODE(laser_uav_managers::EstimationManager)

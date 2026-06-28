@@ -32,7 +32,7 @@ find_package(laser_uav_lib REQUIRED)
 
 set(acados_include "$ENV{ACADOS_SOURCE_DIR}/include")
 set(acados_lib "$ENV{ACADOS_SOURCE_DIR}/lib")
-set(full_model_build ${laser_uav_controllers_DIR}/../../../include/scripts/quadrotor_ode/)
+set(full_model_build ${laser_uav_controllers_DIR}/../../../include/scripts/multirotor_ode/)
 
 set(dependencies
 Eigen3
@@ -91,7 +91,7 @@ target_link_libraries(${control_executable_name}
   ${library_name}
 	${laser_uav_planners}
 	${laser_uav_controllers}
-  ${full_model_build}/libacados_ocp_solver_quadrotor_ode.so
+  ${full_model_build}/libacados_ocp_solver_multirotor_ode.so
 	${acados_lib}/libacados.so
 )
 
@@ -151,8 +151,12 @@ install(DIRECTORY
   launch
   params
   plotjuggler
-  scripts
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/refactor_plotjuggler_config.sh
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
