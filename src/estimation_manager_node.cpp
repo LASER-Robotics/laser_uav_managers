@@ -742,7 +742,7 @@ void EstimationManager::timerCallback() {
     bool has_measurement{false};
 
     laser_uav_estimators::MeasurementPackage measurement;
-    if (is_first_control_msg) {
+    if (is_first_control_msg_) {
       if (px4_odom_msg && enable_px4_odom_) {
         has_measurement      = true;
         measurement.odometry = &(*px4_odom_msg);
