@@ -717,9 +717,9 @@ void EstimationManager::timerCallback() {
         is_first_control_msg_    = true;
         return;
       } else {
-        rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
-        double       dt_last_time = (last_update_time_ - last_control_input_time_).seconds();
-
+        rclcpp::Time current_time       = last_update_time_;
+        rclcpp::Time control_input_time = lrclcpp::Time(control_msg->header.stamp);
+        double       dt_last_time       = (last_update_time_ - control_input_time).seconds();
 
         last_control_input_time_ = current_time;
 
