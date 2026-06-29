@@ -64,6 +64,9 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions &options) : rclcp
   declare_parameter("fast_lio_odom_covariance", 1.0);
   declare_parameter("control_tolerance", 0.1);
   declare_parameter("control_timeout", 0.5);
+  declare_parameter("garmin_tolerance", 0.1);
+  declare_parameter("garmin_timeout", 0.5);
+  declare_parameter("garmin_covariance", 1.0);
 
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
   tf_buffer_      = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -241,9 +244,9 @@ void EstimationManager::getParameters() {
   fast_lio_odom_data_.tolerance = rclcpp::Duration::from_seconds(tolerance);
   fast_lio_odom_data_.timeout   = rclcpp::Duration::from_seconds(timeout);
 
-  get_parameter("garmin_odom_tolerance", tolerance);
-  get_parameter("garmin_odom_timeout", timeout);
-  get_parameter("garmin_odom_covariance", garmin_covariance_);
+  get_parameter("garmin_tolerance", tolerance);
+  get_parameter("garmin_timeout", timeout);
+  get_parameter("garmin_covariance", garmin_covariance_);
   garmin_data_.tolerance = rclcpp::Duration::from_seconds(tolerance);
   garmin_data_.timeout   = rclcpp::Duration::from_seconds(timeout);
 
@@ -407,6 +410,7 @@ void EstimationManager::garminRangeCallback(const sensor_msgs::msg::Range::Share
 
   std::lock_guard<std::mutex> lock(garmin_data_.mtx);
   garmin_data_.buffer[msg->header.stamp] = msg;
+  garmin_data_.is_active                 = true;
   RCLCPP_DEBUG_THROTTLE(
       get_logger(), *get_clock(), 10000, "Received Garmin range message at time %.3f s, frequency: %.2f Hz",
       msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
@@ -560,7 +564,9 @@ std::optional<MsgT> EstimationManager::getSynchronizedMessage(const rclcpp::Time
   if (min_diff <= sensor_data.tolerance) {
     std::optional<MsgT> msg_copy = *best_match_it->second;
     sensor_data.is_active        = true;
-    sensor_data.buffer.erase(best_match_it);
+    if (sensor_name != "GARMIN_RANGE") {
+      sensor_data.buffer.erase(best_match_it);
+    }
     RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 10000, "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(),
                           min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
     return msg_copy;
@@ -623,6 +629,7 @@ void EstimationManager::timerCallback() {
     auto garmin_range_msg  = getSynchronizedMessage(reference_time, garmin_data_, "GARMIN_RANGE");
     auto control_msg       = getSynchronizedMessage(reference_time, control_data_, "CONTROL");
 
+
     RCLCPP_DEBUG(get_logger(), "Synchronized Messages - PX4 Odom: %s, OpenVINS Odom: %s, FastLIO Odom: %s, Garmin Range: %s, Control: %s",
                  px4_odom_msg ? "YES" : "NO", openvins_odom_msg ? "YES" : "NO", fast_lio_odom_msg ? "YES" : "NO", garmin_range_msg ? "YES" : "NO",
                  control_msg ? "YES" : "NO");
@@ -679,7 +686,30 @@ void EstimationManager::timerCallback() {
 
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
 
-    if (control_msg) {
+    bool                                     has_measurement{false};
+    laser_uav_estimators::MeasurementPackage measurement;
+
+    if (px4_odom_msg && enable_px4_odom_) {
+      has_measurement      = true;
+      measurement.odometry = &(*px4_odom_msg);
+      last_update_time_    = rclcpp::Time(px4_odom_msg->header.stamp);
+    } else if (openvins_odom_msg && enable_openvins_odom_) {
+      has_measurement      = true;
+      measurement.odometry = &(*openvins_odom_msg);
+      last_update_time_    = rclcpp::Time(openvins_odom_msg->header.stamp);
+    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+      has_measurement      = true;
+      measurement.odometry = &(*fast_lio_odom_msg);
+      last_update_time_    = rclcpp::Time(fast_lio_odom_msg->header.stamp);
+    }
+
+    if (garmin_range_msg) {
+      measurement.garmin = &(*garmin_range_msg);
+    }
+
+    RCLCPP_DEBUG(get_logger(), "Prediction and Correction - control_msg: %s, update_msg: %s", control_msg ? "YES" : "NO", has_measurement ? "YES" : "NO");
+
+    if (control_msg && has_measurement) {
       RCLCPP_INFO_ONCE(get_logger(), "Running Prediction with Control Manager Thrust.");
 
       if (!is_first_control_msg_) {
@@ -688,11 +718,23 @@ void EstimationManager::timerCallback() {
         return;
       } else {
         rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
-        double       dt_sec       = (current_time - last_control_input_time_).seconds();
-        last_control_input_time_  = current_time;
+        double       dt_last_time = (last_update_time_ - last_control_input_time_).seconds();
+
+
+        last_control_input_time_ = current_time;
+
+        RCLCPP_DEBUG(get_logger(), "Current time: %.3f s", current_time.seconds());
+        RCLCPP_DEBUG(get_logger(), "Last control input time: %.3f s", last_control_input_time_.seconds());
+        RCLCPP_DEBUG(get_logger(), "Update Time: %.3f s", last_update_time_.seconds());
+        RCLCPP_DEBUG(get_logger(), "Time since last update: %.3f s", dt_last_time);
+
+        if (measurement.garmin != nullptr) {
+          double dt_garmin_time = (last_update_time_ - rclcpp::Time(measurement.garmin->header.stamp)).seconds();
+          RCLCPP_DEBUG(get_logger(), "Time since last Garmin measurement: %.3f s", dt_garmin_time);
+        }
 
         bool can_predict = true;
-        if (dt_sec < 0 || dt_sec > 1.0) {
+        if (dt_last_time < 0 || dt_last_time > 1.0) {
           can_predict = false;
         }
 
@@ -721,10 +763,19 @@ void EstimationManager::timerCallback() {
           }
 
           if (can_predict) {
-            mekf_->predict(control_input, dt_sec);
+            mekf_->predict(control_input, dt_last_time);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
             has_prediction     = true;
             is_predicted_      = true;
+          }
+
+          if (is_first_control_msg_) {
+            if (has_measurement) {
+              mekf_->correct(measurement);
+              if (measurement.odometry != nullptr) {
+                last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
+              }
+            }
           }
         }
       }
@@ -739,36 +790,6 @@ void EstimationManager::timerCallback() {
       is_predicted_      = true;
     }
 
-    bool has_measurement{false};
-
-    laser_uav_estimators::MeasurementPackage measurement;
-    if (is_first_control_msg_) {
-      if (px4_odom_msg && enable_px4_odom_) {
-        has_measurement      = true;
-        measurement.odometry = &(*px4_odom_msg);
-        last_update_time_    = rclcpp::Time(px4_odom_msg->header.stamp);
-      } else if (openvins_odom_msg && enable_openvins_odom_) {
-        has_measurement      = true;
-        measurement.odometry = &(*openvins_odom_msg);
-        last_update_time_    = rclcpp::Time(openvins_odom_msg->header.stamp);
-      } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
-        has_measurement      = true;
-        measurement.odometry = &(*fast_lio_odom_msg);
-        last_update_time_    = rclcpp::Time(fast_lio_odom_msg->header.stamp);
-      }
-
-      if (garmin_range_msg) {
-        measurement.garmin = &(*garmin_range_msg);
-        last_update_time_  = rclcpp::Time(garmin_range_msg->header.stamp);
-      }
-
-      if (has_measurement) {
-        mekf_->correct(measurement);
-        if (measurement.odometry != nullptr) {
-          last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
-        }
-      }
-    }
 
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
       publishOdometry(odom_pub_, last_update_time_);

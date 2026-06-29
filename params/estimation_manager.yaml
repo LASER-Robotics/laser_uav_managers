@@ -25,5 +25,9 @@
     fast_lio_odom_timeout: 0.1 # seconds
     fast_lio_odom_covariance: 0.5
 
+    garmin_tolerance: 0.10 # seconds
+    garmin_timeout: 0.5 # seconds
+    garmin_covariance: 0.5
+
     control_tolerance: 0.015 # seconds
     control_timeout: 0.5 # seconds
