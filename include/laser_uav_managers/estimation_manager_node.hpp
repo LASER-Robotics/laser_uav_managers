@@ -105,10 +105,8 @@ private:
   void publishOdometry(rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub, rclcpp::Time &pub_time);
 
   template <typename MsgT>
-  std::optional<MsgT> getSynchronizedMessage(const rclcpp::Time &ref_time, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name);
-
-  template <typename MsgT>
-  void pruneSensorBuffer(const rclcpp::Time &now, SensorDataBuffer<MsgT> &sensor_data, std::string sensor_name);
+  bool is_buffer_valid(SensorDataBuffer<MsgT> &sensor_buffer, const std::string &sensor_name, const rclcpp::Time &reference_time, rclcpp::Logger logger,
+                       rclcpp::Clock::SharedPtr clock);
 
   void set_verbosity(const std::string &verbosity);
   /*//}*/
