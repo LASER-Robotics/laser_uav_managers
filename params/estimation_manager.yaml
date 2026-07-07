@@ -11,18 +11,23 @@
     odometry_source_names: ["px4_api_odom", "openvins_odom", "fast_lio_odom"]
     
     estimation_verbosity: "INFO" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
+    ekf_verbosity: "INFO" # Options: SILENT, ERROR, WARNING, INFO, DEBUG, VERBOSE
 
-    px4_odom_tolerance: 0.015 # seconds
+    px4_odom_tolerance: 0.05 # seconds
     px4_odom_timeout: 0.5 # seconds
     px4_odom_covariance: 0.5
 
-    openvins_odom_tolerance: 0.0075 # seconds
-    openvins_odom_timeout: 1.0 # seconds
+    openvins_odom_tolerance: 0.05 # seconds
+    openvins_odom_timeout: 0.5 # seconds
     openvins_odom_covariance: 0.5
 
-    fast_lio_odom_tolerance: 0.15 # seconds
-    fast_lio_odom_timeout: 1.0 # seconds
+    fast_lio_odom_tolerance: 0.05 # seconds
+    fast_lio_odom_timeout: 0.1 # seconds
     fast_lio_odom_covariance: 0.5
+
+    garmin_tolerance: 0.10 # seconds
+    garmin_timeout: 0.5 # seconds
+    garmin_covariance: 0.5
 
     control_tolerance: 0.015 # seconds
     control_timeout: 0.5 # seconds
