@@ -76,11 +76,11 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("safe_area.constraints.y", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
   declare_parameter("safe_area.constraints.z", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
 
-  odometry_              = nav_msgs::msg::Odometry();
-  odometry_gps_          = nav_msgs::msg::Odometry();
-  odometry_neighbor_gps_ = laser_msgs::msg::NeighborOdomArray();
-  diagnostics_           = laser_msgs::msg::UavControlDiagnostics();
-  diagnostics_.is_fly    = false;
+  odometry_                            = nav_msgs::msg::Odometry();
+  odometry_gps_                        = nav_msgs::msg::Odometry();
+  relative_velocity_position_neighbor_ = laser_msgs::msg::NeighborOdomArray();
+  diagnostics_                         = laser_msgs::msg::UavControlDiagnostics();
+  diagnostics_.is_fly                  = false;
 
   last_angular_speed_             = Eigen::Vector3d::Zero();
   angular_acceleration_estimated_ = Eigen::Vector3d::Zero();
@@ -156,7 +156,7 @@ CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_life
 
   sub_odometry_.reset();
   sub_odometry_gps_.reset();
-  sub_odometry_neighbor_gps_.reset();
+  sub_relative_velocity_position_neighbor_.reset();
   sub_goto_.reset();
   sub_goto_relative_.reset();
   sub_api_diagnostics_.reset();
@@ -255,7 +255,6 @@ void ControlManagerNode::getParameters() {
 
   get_parameter("drone_avoidance.time_window", _time_window_);
   get_parameter("drone_avoidance.r_colision", _r_colision_);
-  get_parameter("drone_avoidance.r_local_neighbor", _r_local_neighbor_);
 
   get_parameter("nmpc_controller.nmpc_mode", _acados_params_.nmpc_mode);
   if (_acados_params_.nmpc_mode == "individual_thrust") {
@@ -294,8 +293,8 @@ void ControlManagerNode::configPubSub() {
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
   sub_odometry_gps_ =
       create_subscription<nav_msgs::msg::Odometry>("odometry_gps_in", 1, std::bind(&ControlManagerNode::subOdometryGps, this, std::placeholders::_1));
-  sub_odometry_neighbor_gps_ = create_subscription<laser_msgs::msg::NeighborOdomArray>(
-      "odometry_neighbor_gps_in", 1, std::bind(&ControlManagerNode::subOdometryNeighborGps, this, std::placeholders::_1));
+  sub_relative_velocity_position_neighbor_ = create_subscription<laser_msgs::msg::NeighborOdomArray>(
+      "relative_velocity_position_neighbor_in", 1, std::bind(&ControlManagerNode::subRelativeVelocityPositionNeighbor, this, std::placeholders::_1));
   sub_goto_ = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
   sub_goto_relative_   = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1,
                                                                              std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
@@ -480,13 +479,13 @@ bool ControlManagerNode::estimateMass() {
 }
 //}
 
-/* subOdometryNeighborGps() //{ */
-void ControlManagerNode::subOdometryNeighborGps(const laser_msgs::msg::NeighborOdomArray &msg) {
+/* subRelativeVelocityPositionNeighbor() //{ */
+void ControlManagerNode::subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg) {
   if (!is_active_) {
     return;
   }
 
-  odometry_neighbor_gps_ = msg;
+  relative_velocity_position_neighbor_ = msg;
 }
 //}
 
@@ -726,35 +725,27 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   auto start_iteration = std::chrono::high_resolution_clock::now();
 
-  std::cout << "r_colision: " << _r_colision_ << std::endl;
-  std::cout << "time_window: " << _time_window_ << std::endl;
-
   std::vector<double> Am_nmpc_array(15, 0.0);
   std::vector<double> bm_nmpc_array(5, -100.0);
   std::vector<double> tv_m_nmpc_array(5, 0.0);
 
-  Eigen::Vector3d pos_gps(odometry_gps_.pose.pose.position.x, odometry_gps_.pose.pose.position.y, odometry_gps_.pose.pose.position.z);
-  Eigen::Vector3d v_gps(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
-
   int drone_i = 0;
 
-  for (const auto &uav : odometry_neighbor_gps_.array) {
+
+  for (const auto &uav : relative_velocity_position_neighbor_.array) {
     if (drone_i >= 5) {
       break;
     }
 
-    Eigen::Vector3d    pos_neighbor(uav.pose.position.x, uav.pose.position.y, uav.pose.position.z);
-    Eigen::Vector3d v_neighbor(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
+    Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
 
-    /* p_relative_gps.squaredNorm() */
+    Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y, uav.pose.position.z);
+    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
 
-    Eigen::Vector3d p_relativo_gps = pos_neighbor - pos_gps;
-    Eigen::Vector3d relative_v_gps = v_gps - v_neighbor;
-
-    Eigen::Vector3d colision_center = p_relativo_gps / _time_window_;
+    Eigen::Vector3d colision_center = relative_position / _time_window_;
     double          r_safe          = _r_colision_ / _time_window_;
 
-    Eigen::Vector3d w_gps  = relative_v_gps - colision_center;
+    Eigen::Vector3d w_gps  = relative_velocity - colision_center;
     double          w_norm = w_gps.norm();
 
     double bm   = 0.0;
@@ -764,7 +755,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
       Eigen::Vector3d Am_gps = w_gps / w_norm;
       Eigen::Vector3d u_gps  = Am_gps * (r_safe - w_norm);
 
-      Eigen::Vector3d v_safe = v_gps + (0.5 * u_gps);
+      Eigen::Vector3d v_safe = velocity_gps + (0.5 * u_gps);
 
       bm = Am_gps.dot(v_safe);
 
@@ -774,8 +765,8 @@ void ControlManagerNode::tmrExternalLoopControl() {
       bm_nmpc_array[drone_i]         = bm;
     }
 
-    if (relative_v_gps.squaredNorm() > 1e-6) {
-      tv_m = std::max(p_relativo_gps.dot(relative_v_gps) / relative_v_gps.squaredNorm(), 0.0);
+    if (relative_velocity.squaredNorm() > 1e-6) {
+      tv_m = std::max(relative_position.dot(relative_velocity) / relative_velocity.squaredNorm(), 0.0);
     }
 
     tv_m_nmpc_array[drone_i] = tv_m;

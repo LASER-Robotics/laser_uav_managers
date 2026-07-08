@@ -82,8 +82,8 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_gps_;
   void                                                          subOdometryGps(const nav_msgs::msg::Odometry &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::NeighborOdomArray>::ConstSharedPtr sub_odometry_neighbor_gps_;
-  void                                                                     subOdometryNeighborGps(const laser_msgs::msg::NeighborOdomArray &msg);
+  rclcpp::Subscription<laser_msgs::msg::NeighborOdomArray>::ConstSharedPtr sub_relative_velocity_position_neighbor_;
+  void                                                                     subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg);
 
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr sub_imu_;
   void                                                        subImu(const sensor_msgs::msg::Imu &msg);
@@ -127,7 +127,7 @@ private:
   laser_msgs::msg::UavControlDiagnostics        diagnostics_;
   nav_msgs::msg::Odometry                       odometry_;
   nav_msgs::msg::Odometry                       odometry_gps_;
-  laser_msgs::msg::NeighborOdomArray            odometry_neighbor_gps_;
+  laser_msgs::msg::NeighborOdomArray            relative_velocity_position_neighbor_;
   laser_msgs::msg::ReferenceState               last_waypoint_;
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState>  current_horizon_path_;
@@ -165,8 +165,7 @@ private:
 
   double _time_window_;
   double _r_colision_;
-  double _r_local_neighbor_;
-
+  
   int lock_waypoint_;
 
   double _takeoff_height_;

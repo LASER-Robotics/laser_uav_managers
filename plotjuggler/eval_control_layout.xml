@@ -1,57 +1,57 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <root>
  <tabbed_widget name="Main Window" parent="main_window">
-  <Tab containers="1" tab_name="tab1">
+  <Tab tab_name="tab1" containers="1">
    <Container>
-    <DockSplitter count="2" orientation="-" sizes="0.593278;0.406722">
+    <DockSplitter sizes="0.593668;0.406332" orientation="-" count="2">
      <DockArea name="...">
-      <plot flip_x="false" mode="XYPlot" flip_y="false" line_width="1.0">
-       <range right="0.388831" top="0.200640" bottom="0.000694" left="-0.150110"/>
+      <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+       <range right="0.134899" bottom="-0.001529" left="-0.034206" top="0.062684"/>
        <limitY/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#05ff00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/[x;y]" color="#00ff11" curve_y="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/[x;y]" color="#0eff12" curve_y="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/[x;y]" color="#00ff05" curve_y="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/[x;y]" color="#15ff00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/[x;y]" color="#0fff00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/[x;y]" color="#feff00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/[x;y]" color="#fff400" curve_y="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/[x;y]" color="#fff300" curve_y="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/[x;y]" color="#fffa00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/[x;y]" color="#ffef00" curve_y="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/[x;y]" color="#00f5ff" curve_y="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/[x;y]" color="#00f1ff" curve_y="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/[x;y]" color="#00e7ff" curve_y="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/[x;y]" color="#00e5ff" curve_y="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/[x;y]" color="#00e5ff" curve_y="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/[x;y]" color="#ff00ef" curve_y="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/[x;y]" color="#ff00ef" curve_y="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/[x;y]" color="#ff0ee4" curve_y="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/[x;y]" color="#ff00fc" curve_y="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/x"/>
-       <curve name="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/[x;y]" color="#ff00eb" curve_y="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/x"/>
-       <curve name="/uav1/estimation_manager/estimation/pose/pose/position/[x;y]" color="#ff0b00" curve_y="/uav1/estimation_manager/estimation/pose/pose/position/y" curve_x="/uav1/estimation_manager/estimation/pose/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#05ff00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/[x;y]" color="#00ff11" curve_x="/uav1/control_manager/diagnostics/reference_horizon[1]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/[x;y]" color="#0eff12" curve_x="/uav1/control_manager/diagnostics/reference_horizon[2]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/[x;y]" color="#00ff05" curve_x="/uav1/control_manager/diagnostics/reference_horizon[3]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/[x;y]" color="#15ff00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[4]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/[x;y]" color="#0fff00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[5]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/[x;y]" color="#feff00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[6]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/[x;y]" color="#fff400" curve_x="/uav1/control_manager/diagnostics/reference_horizon[7]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/[x;y]" color="#fff300" curve_x="/uav1/control_manager/diagnostics/reference_horizon[8]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/[x;y]" color="#fffa00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[9]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/[x;y]" color="#ffef00" curve_x="/uav1/control_manager/diagnostics/reference_horizon[10]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/[x;y]" color="#00f5ff" curve_x="/uav1/control_manager/diagnostics/reference_horizon[11]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/[x;y]" color="#00f1ff" curve_x="/uav1/control_manager/diagnostics/reference_horizon[12]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/[x;y]" color="#00e7ff" curve_x="/uav1/control_manager/diagnostics/reference_horizon[13]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/[x;y]" color="#00e5ff" curve_x="/uav1/control_manager/diagnostics/reference_horizon[14]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/[x;y]" color="#00e5ff" curve_x="/uav1/control_manager/diagnostics/reference_horizon[15]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/[x;y]" color="#ff00ef" curve_x="/uav1/control_manager/diagnostics/reference_horizon[16]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/[x;y]" color="#ff00ef" curve_x="/uav1/control_manager/diagnostics/reference_horizon[17]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/[x;y]" color="#ff0ee4" curve_x="/uav1/control_manager/diagnostics/reference_horizon[18]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/[x;y]" color="#ff00fc" curve_x="/uav1/control_manager/diagnostics/reference_horizon[19]/pose/position/x"/>
+       <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/[x;y]" color="#ff00eb" curve_x="/uav1/control_manager/diagnostics/reference_horizon[20]/pose/position/x"/>
+       <curve curve_y="/uav1/estimation_manager/estimation/pose/pose/position/y" name="/uav1/estimation_manager/estimation/pose/pose/position/[x;y]" color="#ff0b00" curve_x="/uav1/estimation_manager/estimation/pose/pose/position/x"/>
       </plot>
      </DockArea>
-     <DockSplitter count="2" orientation="|" sizes="0.502586;0.497414">
+     <DockSplitter sizes="0.502016;0.497984" orientation="|" count="2">
       <DockArea name="...">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-        <range right="28.629978" top="5.003460" bottom="4.858157" left="-0.150110"/>
+       <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+        <range right="89.059680" bottom="4.985284" left="-0.034206" top="5.000359"/>
         <limitY/>
         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/z" color="#10ff00"/>
         <curve name="/uav1/estimation_manager/estimation/pose/pose/position/z" color="#ff0a00"/>
        </plot>
       </DockArea>
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+      <DockSplitter sizes="0.501629;0.498371" orientation="-" count="2">
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.629978" top="0.146916" bottom="0.054972" left="-0.150110"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="89.059680" bottom="0.011067" left="-0.034206" top="0.038940"/>
          <limitY/>
          <curve name="/uav1/control_manager/diagnostics/current_norm_speed" color="#1f77b4"/>
         </plot>
        </DockArea>
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.629978" top="1.471184" bottom="-1.013005" left="-0.150110"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="89.059680" bottom="-0.935424" left="-0.034206" top="0.621596"/>
          <limitY/>
          <curve name="/uav1/control_manager/diagnostics/current_norm_speed" color="#17becf">
           <transform name="Derivative" alias="/uav1/control_manager/diagnostics/current_norm_speed[Derivative]">
@@ -65,28 +65,28 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab2">
+  <Tab tab_name="tab2" containers="1">
    <Container>
-    <DockSplitter count="3" orientation="-" sizes="0.332876;0.334248;0.332876">
+    <DockSplitter sizes="0.332893;0.334214;0.332893" orientation="-" count="3">
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.020078" bottom="-0.021327" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.010669" left="83.800123" top="0.033739"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/linear/x" color="#ff0a00"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/x" color="#02ff00"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.109552" bottom="-0.081728" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.021400" left="83.800123" top="0.022965"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/linear/y" color="#ff1800"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/y" color="#04ff00"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.144550" bottom="-0.003526" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.000647" left="83.800123" top="0.026545"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/linear/z" color="#ff0007"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/linear/z" color="#03ff00"/>
@@ -95,36 +95,36 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab3">
+  <Tab tab_name="tab3" containers="1">
    <Container>
-    <DockSplitter count="4" orientation="-" sizes="0.25;0.25;0.25;0.25">
+    <DockSplitter sizes="0.25;0.25;0.25;0.25" orientation="-" count="4">
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="1.000094" bottom="0.996147" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="0.998851" left="83.800123" top="1.000028"/>
        <limitY/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/w" color="#00ff10"/>
        <curve name="/uav1/estimation_manager/estimation/pose/pose/orientation/w" color="#ff0300"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.075422" bottom="-0.033205" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.000202" left="83.800123" top="0.008289"/>
        <limitY/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/x" color="#00ff07"/>
        <curve name="/uav1/estimation_manager/estimation/pose/pose/orientation/x" color="#ff0700"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.000834" bottom="-0.034196" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.013442" left="83.800123" top="0.000328"/>
        <limitY/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/y" color="#12ff0e"/>
        <curve name="/uav1/estimation_manager/estimation/pose/pose/orientation/y" color="#ff0700"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.040615" bottom="-0.000813" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.001146" left="83.800123" top="0.046978"/>
        <limitY/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/orientation/z" color="#06ff00"/>
        <curve name="/uav1/estimation_manager/estimation/pose/pose/orientation/z" color="#ff1100"/>
@@ -133,28 +133,28 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab2">
+  <Tab tab_name="tab2" containers="1">
    <Container>
-    <DockSplitter count="3" orientation="-" sizes="0.332876;0.334248;0.332876">
+    <DockSplitter sizes="0.332893;0.334214;0.332893" orientation="-" count="3">
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="2.651205" bottom="-2.713646" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.023980" left="83.800123" top="0.022956"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/angular/x" color="#ff0001"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/x" color="#03ff00"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.094438" bottom="-0.079452" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.023850" left="83.800123" top="0.022560"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/angular/y" color="#ff0300"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/y" color="#00ff09"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="0.011599" bottom="-0.013825" left="23.635823"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="-0.015585" left="83.800123" top="0.009542"/>
        <limitY/>
        <curve name="/uav1/estimation_manager/estimation/twist/twist/angular/z" color="#ff0000"/>
        <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/twist/angular/z" color="#00ff0d"/>
@@ -163,39 +163,39 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab3">
+  <Tab tab_name="tab3" containers="1">
    <Container>
-    <DockSplitter count="3" orientation="-" sizes="0.341798;0.341112;0.31709">
-     <DockSplitter count="2" orientation="|" sizes="0.500705;0.499295">
+    <DockSplitter sizes="0.34214;0.340819;0.317041" orientation="-" count="3">
+     <DockSplitter sizes="0.501008;0.498992" orientation="|" count="2">
       <DockArea name="...">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-        <range right="28.629978" top="8.942233" bottom="-0.218103" left="23.640662"/>
+       <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+        <range right="89.059680" bottom="3.975817" left="84.069233" top="4.565123"/>
         <limitY/>
         <curve name="/uav1/control_manager/diagnostics/last_control_input/data[2]" color="#ff000a"/>
         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[2]" color="#07ff00"/>
        </plot>
       </DockArea>
       <DockArea name="...">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-        <range right="28.629978" top="9.070833" bottom="-0.221240" left="23.640662"/>
+       <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+        <range right="89.059680" bottom="4.044876" left="84.069233" top="4.588290"/>
         <limitY/>
         <curve name="/uav1/control_manager/diagnostics/last_control_input/data[0]" color="#ff0000"/>
         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[0]" color="#00ff07"/>
        </plot>
       </DockArea>
      </DockSplitter>
-     <DockSplitter count="2" orientation="|" sizes="0.502586;0.497414">
+     <DockSplitter sizes="0.502016;0.497984" orientation="|" count="2">
       <DockArea name="...">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-        <range right="28.629978" top="8.983550" bottom="-0.219111" left="23.640662"/>
+       <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+        <range right="89.059680" bottom="3.987930" left="84.069233" top="4.628695"/>
         <limitY/>
         <curve name="/uav1/control_manager/diagnostics/last_control_input/data[1]" color="#ff0400"/>
         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[1]" color="#00ff11"/>
        </plot>
       </DockArea>
       <DockArea name="...">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-        <range right="28.629978" top="9.154766" bottom="-0.223287" left="23.640662"/>
+       <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+        <range right="89.059680" bottom="3.995617" left="84.069233" top="4.583705"/>
         <limitY/>
         <curve name="/uav1/control_manager/diagnostics/last_control_input/data[3]" color="#ff0700"/>
         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/individual_thrust/data[3]" color="#00ff11"/>
@@ -203,8 +203,8 @@
       </DockArea>
      </DockSplitter>
      <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-       <range right="28.629978" top="17.850010" bottom="14.954606" left="23.640662"/>
+      <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+       <range right="89.059680" bottom="17.164133" left="84.069233" top="17.265041"/>
        <limitY/>
        <curve name="total_thrust_desired" color="#17becf"/>
       </plot>
@@ -212,43 +212,41 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab2">
+  <Tab tab_name="tab2" containers="1">
    <Container>
-    <DockSplitter count="1" orientation="-" sizes="1">
-     <DockSplitter count="2" orientation="|" sizes="0.500705;0.499295">
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+    <DockSplitter sizes="1" orientation="-" count="1">
+     <DockSplitter sizes="0.501008;0.498992" orientation="|" count="2">
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
        <DockArea name="...">
-        <plot flip_x="false" mode="XYPlot" flip_y="false" line_width="1.0">
-         <range right="0.278142" top="0.200640" bottom="0.000694" left="-0.039420"/>
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="0.103210" bottom="-0.003888" left="-0.002517" top="0.065043"/>
          <limitY/>
-         <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#1ac938" curve_y="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/y" curve_x="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
-         <curve name="/uav1/estimation_manager/estimation/pose/pose/position/[x;y]" color="#ff7f0e" curve_y="/uav1/estimation_manager/estimation/pose/pose/position/y" curve_x="/uav1/estimation_manager/estimation/pose/pose/position/x"/>
+         <curve curve_y="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/y" name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#1ac938" curve_x="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
+         <curve curve_y="/uav1/estimation_manager/estimation/pose/pose/position/y" name="/uav1/estimation_manager/estimation/pose/pose/position/[x;y]" color="#ff7f0e" curve_x="/uav1/estimation_manager/estimation/pose/pose/position/x"/>
         </plot>
        </DockArea>
        <DockArea name="...">
-        <plot flip_x="false" mode="XYPlot" flip_y="false" line_width="1.0">
-         <range right="0.295865" top="0.210621" bottom="-0.001778" left="-0.040406"/>
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="0.240303" bottom="-0.004433" left="-0.017304" top="0.163519"/>
          <limitY/>
-         <curve name="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#17becf" curve_y="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/y" curve_x="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
-         <curve name="/uav3/estimation_manager/estimation/pose/pose/position/[x;y]" color="#bcbd22" curve_y="/uav3/estimation_manager/estimation/pose/pose/position/y" curve_x="/uav3/estimation_manager/estimation/pose/pose/position/x"/>
+         <curve curve_y="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/y" name="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#17becf" curve_x="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
+         <curve curve_y="/uav3/estimation_manager/estimation/pose/pose/position/y" name="/uav3/estimation_manager/estimation/pose/pose/position/[x;y]" color="#bcbd22" curve_x="/uav3/estimation_manager/estimation/pose/pose/position/x"/>
         </plot>
        </DockArea>
       </DockSplitter>
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
        <DockArea name="...">
-        <plot flip_x="false" mode="XYPlot" flip_y="false" line_width="1.0">
-         <range right="0.272838" top="0.176555" bottom="-0.000152" left="-0.006084"/>
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="0.214357" bottom="-0.005768" left="-0.018995" top="0.147080"/>
          <limitY/>
-         <curve name="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#f14cc1" curve_y="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/y" curve_x="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
-         <curve name="/uav2/estimation_manager/estimation/pose/pose/position/[x;y]" color="#9467bd" curve_y="/uav2/estimation_manager/estimation/pose/pose/position/y" curve_x="/uav2/estimation_manager/estimation/pose/pose/position/x"/>
+         <curve curve_y="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/y" name="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#f14cc1" curve_x="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
+         <curve curve_y="/uav2/estimation_manager/estimation/pose/pose/position/y" name="/uav2/estimation_manager/estimation/pose/pose/position/[x;y]" color="#9467bd" curve_x="/uav2/estimation_manager/estimation/pose/pose/position/x"/>
         </plot>
        </DockArea>
        <DockArea name="...">
-        <plot flip_x="false" mode="XYPlot" flip_y="false" line_width="1.0">
-         <range right="0.265167" top="0.159092" bottom="-0.014869" left="-0.009421"/>
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="0.150181" bottom="-0.100000" left="-0.150181" top="0.100000"/>
          <limitY/>
-         <curve name="/uav4/control_manager/diagnostics/reference_horizon[0]/pose/position/[x;y]" color="#1f77b4" curve_y="/uav4/control_manager/diagnostics/reference_horizon[0]/pose/position/y" curve_x="/uav4/control_manager/diagnostics/reference_horizon[0]/pose/position/x"/>
-         <curve name="/uav4/estimation_manager/estimation/pose/pose/position/[x;y]" color="#d62728" curve_y="/uav4/estimation_manager/estimation/pose/pose/position/y" curve_x="/uav4/estimation_manager/estimation/pose/pose/position/x"/>
         </plot>
        </DockArea>
       </DockSplitter>
@@ -256,43 +254,41 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="tab2">
+  <Tab tab_name="tab2" containers="1">
    <Container>
-    <DockSplitter count="1" orientation="-" sizes="1">
-     <DockSplitter count="2" orientation="|" sizes="0.500235;0.499765">
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+    <DockSplitter sizes="1" orientation="-" count="1">
+     <DockSplitter sizes="0.5;0.5" orientation="|" count="2">
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.630423" top="5.003460" bottom="4.858157" left="23.621622"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="89.126288" bottom="4.985284" left="83.800123" top="5.000359"/>
          <limitY/>
          <curve name="/uav1/control_manager/diagnostics/reference_horizon[0]/pose/position/z" color="#1f77b4"/>
          <curve name="/uav1/estimation_manager/estimation/pose/pose/position/z" color="#d62728"/>
         </plot>
        </DockArea>
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.630423" top="5.003389" bottom="4.861058" left="23.621622"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="89.126288" bottom="4.983558" left="83.800123" top="5.000401"/>
          <limitY/>
          <curve name="/uav3/estimation_manager/estimation/pose/pose/position/z" color="#f14cc1"/>
          <curve name="/uav3/control_manager/diagnostics/reference_horizon[0]/pose/position/z" color="#9467bd"/>
         </plot>
        </DockArea>
       </DockSplitter>
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.630423" top="5.028819" bottom="4.957847" left="23.621622"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="89.126288" bottom="4.984409" left="83.800123" top="5.000380"/>
          <limitY/>
          <curve name="/uav2/estimation_manager/estimation/pose/pose/position/z" color="#17becf"/>
          <curve name="/uav2/control_manager/diagnostics/reference_horizon[0]/pose/position/z" color="#bcbd22"/>
         </plot>
        </DockArea>
        <DockArea name="...">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" line_width="1.0">
-         <range right="28.630423" top="5.004061" bottom="4.833486" left="23.621622"/>
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="28.630423" bottom="4.833486" left="23.621622" top="5.004061"/>
          <limitY/>
-         <curve name="/uav4/estimation_manager/estimation/pose/pose/position/z" color="#1ac938"/>
-         <curve name="/uav4/control_manager/diagnostics/reference_horizon[0]/pose/position/z" color="#ff7f0e"/>
         </plot>
        </DockArea>
       </DockSplitter>
@@ -300,14 +296,52 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <currentTabIndex index="5"/>
+  <Tab tab_name="tab2" containers="1">
+   <Container>
+    <DockSplitter sizes="1" orientation="-" count="1">
+     <DockSplitter sizes="0.5;0.5" orientation="|" count="2">
+      <DockSplitter sizes="0.498681;0.501319" orientation="-" count="2">
+       <DockArea name="...">
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="15.132076" bottom="0.086287" left="15.111577" top="0.099889"/>
+         <limitY/>
+         <curve curve_y="/uav1/neighbor_odom_aux_out/array[0]/pose/position/y" name="/uav1/neighbor_odom_aux_out/array[0]/pose/position/[x;y]" color="#bcbd22" curve_x="/uav1/neighbor_odom_aux_out/array[0]/pose/position/x"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="1.000000" bottom="0.000000" left="0.000000" top="1.000000"/>
+         <limitY/>
+        </plot>
+       </DockArea>
+      </DockSplitter>
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
+       <DockArea name="...">
+        <plot flip_x="false" line_width="1.0" mode="XYPlot" flip_y="false">
+         <range right="15.131604" bottom="15.081011" left="15.085233" top="15.112637"/>
+         <limitY/>
+         <curve curve_y="/uav1/neighbor_odom_aux_out/array[1]/pose/position/y" name="/uav1/neighbor_odom_aux_out/array[1]/pose/position/[x;y]" color="#1f77b4" curve_x="/uav1/neighbor_odom_aux_out/array[1]/pose/position/x"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_x="false" line_width="1.0" mode="TimeSeries" flip_y="false">
+         <range right="1.000000" bottom="0.000000" left="0.000000" top="1.000000"/>
+         <limitY/>
+        </plot>
+       </DockArea>
+      </DockSplitter>
+     </DockSplitter>
+    </DockSplitter>
+   </Container>
+  </Tab>
+  <currentTabIndex index="7"/>
  </tabbed_widget>
  <use_relative_time_offset enabled="1"/>
  <!-- - - - - - - - - - - - - - - -->
  <!-- - - - - - - - - - - - - - - -->
  <Plugins>
   <plugin ID="DataLoad CSV">
-   <parameters time_axis="" delimiter="0"/>
+   <parameters delimiter="0" time_axis=""/>
   </plugin>
   <plugin ID="DataLoad MCAP"/>
   <plugin ID="DataLoad ROS2 bags">
@@ -325,7 +359,7 @@
    <max_array_size value="100"/>
    <boolean_strings_to_number value="true"/>
    <remove_suffix_from_strings value="true"/>
-   <selected_topics value="/uav1/control_manager/diagnostics;/uav1/estimation_manager/estimation;/uav2/control_manager/diagnostics;/uav2/estimation_manager/estimation;/uav3/estimation_manager/estimation;/uav4/estimation_manager/estimation;/uav3/control_manager/diagnostics;/uav4/control_manager/diagnostics"/>
+   <selected_topics value="/uav1/control_manager/diagnostics;/uav1/estimation_manager/estimation;/uav2/control_manager/diagnostics;/uav2/estimation_manager/estimation;/uav3/control_manager/diagnostics;/uav3/estimation_manager/estimation;/uav3/neighbor_odom_aux_out;/uav1/neighbor_odom_aux_out;/uav1/neighbor_odom"/>
   </plugin>
   <plugin ID="UDP Server"/>
   <plugin ID="WebSocket Server"/>
