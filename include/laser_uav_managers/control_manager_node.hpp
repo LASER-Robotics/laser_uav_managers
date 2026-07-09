@@ -154,6 +154,8 @@ private:
 
   int lock_waypoint_;
 
+  double trajectory_speed_;
+
   double _takeoff_height_;
   double _takeoff_speed_;
 

@@ -549,10 +549,22 @@ void ControlManagerNode::subTrajectoryPath(const laser_msgs::msg::TrajectoryPath
                   count_not_deviation);
     }
 
-    agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
     stop_on_waypoints_ = msg.stop_on_waypoints;
+    trajectory_speed_  = msg.speed;
     desired_path_      = msg.waypoints;
     emergency_hover_   = false;
+
+    if (desired_path_.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Trajectory will not executed, because it does not contain any waypoint.");
+      return;
+    }
+
+    if (stop_on_waypoints_) {
+      agile_planner_.generateTrajectory(last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+    } else {
+      agile_planner_.generateTrajectory(last_waypoint_, desired_path_, trajectory_speed_);
+    }
+
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -745,6 +757,11 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
     if (lock_waypoint_ > 300) {
       desired_path_.erase(desired_path_.begin());
+      lock_waypoint_ = 0;
+
+      if (!desired_path_.empty()) {
+        agile_planner_.generateTrajectory(last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+      }
     }
 
     last_waypoint_.use_linear_velocity   = false;
