@@ -61,6 +61,10 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("multirotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
   declare_parameter("multirotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
 
+  declare_parameter("drone_avoidance.time_window", rclcpp::ParameterValue(1.0));
+  declare_parameter("drone_avoidance.r_colision", rclcpp::ParameterValue(3.0));
+  declare_parameter("drone_avoidance.r_local_neighbor", rclcpp::ParameterValue(10.0));
+
   declare_parameter("nmpc_controller.nmpc_mode", rclcpp::ParameterValue(""));
   declare_parameter("nmpc_controller.N", rclcpp::ParameterValue(0));
   declare_parameter("nmpc_controller.dt", rclcpp::ParameterValue(0.0));
@@ -72,9 +76,11 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions &options) : rcl
   declare_parameter("safe_area.constraints.y", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
   declare_parameter("safe_area.constraints.z", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
 
-  odometry_           = nav_msgs::msg::Odometry();
-  diagnostics_        = laser_msgs::msg::UavControlDiagnostics();
-  diagnostics_.is_fly = false;
+  odometry_                            = nav_msgs::msg::Odometry();
+  odometry_gps_                        = nav_msgs::msg::Odometry();
+  relative_velocity_position_neighbor_ = laser_msgs::msg::NeighborOdomArray();
+  diagnostics_                         = laser_msgs::msg::UavControlDiagnostics();
+  diagnostics_.is_fly                  = false;
 
   last_angular_speed_             = Eigen::Vector3d::Zero();
   angular_acceleration_estimated_ = Eigen::Vector3d::Zero();
@@ -149,6 +155,8 @@ CallbackReturn ControlManagerNode::on_cleanup([[maybe_unused]] const rclcpp_life
   pub_diagnostics_.reset();
 
   sub_odometry_.reset();
+  sub_odometry_gps_.reset();
+  sub_relative_velocity_position_neighbor_.reset();
   sub_goto_.reset();
   sub_goto_relative_.reset();
   sub_api_diagnostics_.reset();
@@ -245,6 +253,9 @@ void ControlManagerNode::getParameters() {
   get_parameter("multirotor_parameters.thrust_max", _controller_multirotor_params_.thrust_max);
   get_parameter("multirotor_parameters.total_thrust_max", _controller_multirotor_params_.total_thrust_max);
 
+  get_parameter("drone_avoidance.time_window", _time_window_);
+  get_parameter("drone_avoidance.r_colision", _r_colision_);
+
   get_parameter("nmpc_controller.nmpc_mode", _acados_params_.nmpc_mode);
   if (_acados_params_.nmpc_mode == "individual_thrust") {
     angular_rates_and_thrust_mode_ = false;
@@ -280,7 +291,11 @@ void ControlManagerNode::configPubSub() {
   RCLCPP_INFO(get_logger(), "initPubSub");
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
-  sub_goto_     = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
+  sub_odometry_gps_ =
+      create_subscription<nav_msgs::msg::Odometry>("odometry_gps_in", 1, std::bind(&ControlManagerNode::subOdometryGps, this, std::placeholders::_1));
+  sub_relative_velocity_position_neighbor_ = create_subscription<laser_msgs::msg::NeighborOdomArray>(
+      "relative_velocity_position_neighbor_in", 1, std::bind(&ControlManagerNode::subRelativeVelocityPositionNeighbor, this, std::placeholders::_1));
+  sub_goto_ = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
   sub_goto_relative_   = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1,
                                                                              std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
   sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
@@ -461,6 +476,26 @@ bool ControlManagerNode::estimateMass() {
   RCLCPP_INFO(this->get_logger(), "Estimated Calibrated Mass: %.2f", estimated_mass_);
 
   return true;
+}
+//}
+
+/* subRelativeVelocityPositionNeighbor() //{ */
+void ControlManagerNode::subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg) {
+  if (!is_active_) {
+    return;
+  }
+
+  relative_velocity_position_neighbor_ = msg;
+}
+//}
+
+/* subOdometryGps() //{ */
+void ControlManagerNode::subOdometryGps(const nav_msgs::msg::Odometry &msg) {
+  if (!is_active_) {
+    return;
+  }
+
+  odometry_gps_ = msg;
 }
 //}
 
@@ -690,6 +725,66 @@ void ControlManagerNode::tmrExternalLoopControl() {
 
   auto start_iteration = std::chrono::high_resolution_clock::now();
 
+  std::vector<double> Am_nmpc_array(15, 0.0);
+  std::vector<double> bm_nmpc_array(5, -100.0);
+  std::vector<double> tv_m_nmpc_array(5, 0.0);
+
+  int drone_i = 0;
+
+
+  for (const auto &uav : relative_velocity_position_neighbor_.array) {
+    if (drone_i >= 5) {
+      break;
+    }
+
+    Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
+
+    Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y, uav.pose.position.z);
+    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
+
+    Eigen::Vector3d colision_center = relative_position / _time_window_;
+    double          r_safe          = _r_colision_ / _time_window_;
+
+    Eigen::Vector3d w_gps  = relative_velocity - colision_center;
+    double          w_norm = w_gps.norm();
+
+    double bm   = 0.0;
+    double tv_m = 0.0;
+
+    if (w_norm < r_safe) {
+      RCLCPP_WARN(this->get_logger(), "Imminent drone collision!");
+      diagnostics_.collision = true;
+      collision_loop = 0;
+
+      Eigen::Vector3d Am_gps = w_gps / w_norm;
+      Eigen::Vector3d u_gps  = Am_gps * (r_safe - w_norm);
+
+      Eigen::Vector3d v_safe = velocity_gps + (0.5 * u_gps);
+
+      bm = Am_gps.dot(v_safe);
+
+      Am_nmpc_array[drone_i * 3 + 0] = Am_gps.x();
+      Am_nmpc_array[drone_i * 3 + 1] = Am_gps.y();
+      Am_nmpc_array[drone_i * 3 + 2] = Am_gps.z();
+      bm_nmpc_array[drone_i]         = bm;
+    } else {
+      if (collision_loop >= 200) {
+        diagnostics_.collision = false;
+      }
+    }
+
+    if (relative_velocity.squaredNorm() > 1e-6) {
+      tv_m = std::max(relative_position.dot(relative_velocity) / relative_velocity.squaredNorm(), 0.0);
+    }
+
+    tv_m_nmpc_array[drone_i] = tv_m;
+
+    drone_i++;
+  }
+
+  nmpc_controller_.setRVCConstraints(Am_nmpc_array, bm_nmpc_array, tv_m_nmpc_array);
+  collision_loop++;
+
   if (land_rampdown_) {
     RCLCPP_INFO(this->get_logger(), "Land Ramp Down: %.2f", land_start_rampdown_);
 
@@ -753,9 +848,9 @@ void ControlManagerNode::tmrExternalLoopControl() {
     if (_safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       checkSafeArea();
     }
-    last_waypoint_ = current_horizon_path_[0];
-    lock_waypoint_ = 0;
 
+    last_waypoint_                 = current_horizon_path_[0];
+    lock_waypoint_                 = 0;
     diagnostics_.reference_horizon = current_horizon_path_;
     nmpc_solution_                 = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();

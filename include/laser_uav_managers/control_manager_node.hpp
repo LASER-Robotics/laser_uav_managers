@@ -20,6 +20,8 @@
 #include <laser_msgs/msg/trajectory_path.hpp>
 #include <laser_msgs/msg/motor_speed_stamped.hpp>
 #include <laser_msgs/msg/motor_speed.hpp>
+#include <laser_msgs/msg/neighbor_odom_array.hpp>
+#include <laser_msgs/msg/neighbor_odom.hpp>
 
 #include <laser_uav_lib/filter/irr_filter.hpp>
 #include <laser_uav_lib/metrics/rmse.hpp>
@@ -77,6 +79,12 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void                                                          subOdometry(const nav_msgs::msg::Odometry &msg);
 
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_gps_;
+  void                                                          subOdometryGps(const nav_msgs::msg::Odometry &msg);
+
+  rclcpp::Subscription<laser_msgs::msg::NeighborOdomArray>::ConstSharedPtr sub_relative_velocity_position_neighbor_;
+  void                                                                     subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg);
+
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr sub_imu_;
   void                                                        subImu(const sensor_msgs::msg::Imu &msg);
 
@@ -118,6 +126,8 @@ private:
 
   laser_msgs::msg::UavControlDiagnostics        diagnostics_;
   nav_msgs::msg::Odometry                       odometry_;
+  nav_msgs::msg::Odometry                       odometry_gps_;
+  laser_msgs::msg::NeighborOdomArray            relative_velocity_position_neighbor_;
   laser_msgs::msg::ReferenceState               last_waypoint_;
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState>  current_horizon_path_;
@@ -152,6 +162,10 @@ private:
   double       estimated_mass_;
   double       estimated_mass_for_detect_landing_;
 
+
+  double _time_window_;
+  double _r_colision_;
+
   int lock_waypoint_;
 
   double _takeoff_height_;
@@ -162,6 +176,7 @@ private:
   double _land_increment_rampdown_;
 
   double land_start_rampdown_;
+  int    collision_loop{0};
 
   laser_uav_lib::RMSE estimated_rmse_;
 
