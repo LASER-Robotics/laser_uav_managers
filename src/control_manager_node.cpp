@@ -752,6 +752,10 @@ void ControlManagerNode::tmrExternalLoopControl() {
     double tv_m = 0.0;
 
     if (w_norm < r_safe) {
+      RCLCPP_WARN(this->get_logger(), "Imminent drone collision!");
+      diagnostics_.collision = true;
+      collision_loop = 0;
+
       Eigen::Vector3d Am_gps = w_gps / w_norm;
       Eigen::Vector3d u_gps  = Am_gps * (r_safe - w_norm);
 
@@ -763,6 +767,10 @@ void ControlManagerNode::tmrExternalLoopControl() {
       Am_nmpc_array[drone_i * 3 + 1] = Am_gps.y();
       Am_nmpc_array[drone_i * 3 + 2] = Am_gps.z();
       bm_nmpc_array[drone_i]         = bm;
+    } else {
+      if (collision_loop >= 200) {
+        diagnostics_.collision = false;
+      }
     }
 
     if (relative_velocity.squaredNorm() > 1e-6) {
@@ -775,6 +783,7 @@ void ControlManagerNode::tmrExternalLoopControl() {
   }
 
   nmpc_controller_.setRVCConstraints(Am_nmpc_array, bm_nmpc_array, tv_m_nmpc_array);
+  collision_loop++;
 
   if (land_rampdown_) {
     RCLCPP_INFO(this->get_logger(), "Land Ramp Down: %.2f", land_start_rampdown_);

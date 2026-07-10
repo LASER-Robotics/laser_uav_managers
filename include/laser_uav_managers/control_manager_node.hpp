@@ -165,7 +165,7 @@ private:
 
   double _time_window_;
   double _r_colision_;
-  
+
   int lock_waypoint_;
 
   double _takeoff_height_;
@@ -176,6 +176,7 @@ private:
   double _land_increment_rampdown_;
 
   double land_start_rampdown_;
+  int    collision_loop{0};
 
   laser_uav_lib::RMSE estimated_rmse_;
 
