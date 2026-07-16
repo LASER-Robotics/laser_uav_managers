@@ -23,10 +23,6 @@ def generate_launch_description():
     uav_name = os.environ['UAV_NAME']
     uav_type = os.environ['UAV_TYPE']
     
-    uav_neighbor = None # Inicializar a variável evita erros mais para frente
-
-    print(uav_neighbor)
-    
     defaults_uavs = ["x500", "lr7pro"]
 
     if uav_name == "":
