@@ -1,6 +1,6 @@
-#include "laser_uav_managers/estimation_manager_node.hpp"
-
 #include <rclcpp_components/register_node_macro.hpp>
+
+#include <laser_uav_managers/estimation_manager_node.hpp>
 
 namespace laser_uav_managers
 {
@@ -78,12 +78,12 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(get_logger(), "EstimationManager node initialized.");
 }
-//}
+/*//}*/
 
 /* ~EstimationManager() //{ */
 EstimationManager::~EstimationManager()
 {}
-//}
+/*//}*/
 
 /* set_verbosity() //{ */
 void EstimationManager::set_verbosity(const std::string & verbosity)
@@ -102,7 +102,7 @@ void EstimationManager::set_verbosity(const std::string & verbosity)
 
   RCLCPP_INFO_STREAM(get_logger(), "Verbosity level set to: " << verbosity);
 }
-//}
+/*//}*/
 
 /* on_configure() //{ */
 CallbackReturn EstimationManager::on_configure(const rclcpp_lifecycle::State &)
@@ -117,7 +117,7 @@ CallbackReturn EstimationManager::on_configure(const rclcpp_lifecycle::State &)
 
   return CallbackReturn::SUCCESS;
 }
-//}
+/*//}*/
 
 /* on_activate() //{ */
 CallbackReturn EstimationManager::on_activate(const rclcpp_lifecycle::State &)
@@ -131,7 +131,7 @@ CallbackReturn EstimationManager::on_activate(const rclcpp_lifecycle::State &)
   diagnostics_timer_->reset();
   return CallbackReturn::SUCCESS;
 }
-//}
+/*//}*/
 
 /* on_deactivate() //{ */
 CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State &)
@@ -144,7 +144,7 @@ CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State &)
   diagnostics_pub_->on_deactivate();
   return CallbackReturn::SUCCESS;
 }
-//}
+/*//}*/
 
 /* on_cleanup() //{ */
 CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State &)
@@ -162,7 +162,7 @@ CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State &)
 
   return CallbackReturn::SUCCESS;
 }
-//}
+/*//}*/
 
 /* on_shutdown() //{ */
 CallbackReturn EstimationManager::on_shutdown(const rclcpp_lifecycle::State &)
@@ -170,7 +170,7 @@ CallbackReturn EstimationManager::on_shutdown(const rclcpp_lifecycle::State &)
   RCLCPP_INFO(get_logger(), "Shutting down EstimationManager...");
   return CallbackReturn::SUCCESS;
 }
-//}
+/*//}*/
 
 /* get_parameters() //{ */
 void EstimationManager::get_parameters()
@@ -270,8 +270,9 @@ void EstimationManager::get_parameters()
   double garmin_position_z_gain;
   get_parameter("measurement_noise_gains.garmin.position_z", garmin_position_z_gain);
 
-  // Fixed: Assigned garmin gain to garmin_measurement_noise_gains_ instead of non-existent fields
-  garmin_measurement_noise_gains_.odometry.position_z = garmin_position_z_gain;
+  fast_lio_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
+  openvins_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
+  px4_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
 
   double tolerance, timeout;
 
@@ -306,7 +307,7 @@ void EstimationManager::get_parameters()
 
   RCLCPP_INFO(get_logger(), "Parameters loaded.");
 }
-//}
+/*//}*/
 
 /* configure_pub_sub() //{ */
 void EstimationManager::configure_pub_sub()
@@ -318,22 +319,22 @@ void EstimationManager::configure_pub_sub()
 
   odometry_px4_sub_ = create_subscription<nav_msgs::msg::Odometry>(
     "odometry_in", 10,
-    std::bind(&EstimationManager::px4_odometry_callback, this, std::placeholders::_1));
+    std::bind(&EstimationManager::odometry_px4_callback, this, std::placeholders::_1));
   odometry_fast_lio_sub_ = create_subscription<nav_msgs::msg::Odometry>(
     "odometry_fast_lio_in", 10,
-    std::bind(&EstimationManager::fast_lio_odometry_callback, this, std::placeholders::_1));
+    std::bind(&EstimationManager::odometry_fast_lio_callback, this, std::placeholders::_1));
   odometry_openvins_sub_ = create_subscription<nav_msgs::msg::Odometry>(
     "odometry_openvins_in", 10,
-    std::bind(&EstimationManager::openvins_odometry_callback, this, std::placeholders::_1));
+    std::bind(&EstimationManager::odometry_openvins_callback, this, std::placeholders::_1));
   control_sub_ = create_subscription<laser_msgs::msg::UavControlDiagnostics>(
     "control_in", 10, std::bind(&EstimationManager::control_callback, this, std::placeholders::_1));
-  // Fixed: Initialized Garmin range subscription
   garmin_sub_ = create_subscription<sensor_msgs::msg::Range>(
-    "garmin_in", 10, std::bind(&EstimationManager::garmin_callback, this, std::placeholders::_1));
+    "garmin_in", 10,
+    std::bind(&EstimationManager::garmin_range_callback, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "Publishers and subscribers configured.");
 }
-//}
+/*//}*/
 
 /* configure_timers() //{ */
 void EstimationManager::configure_timers()
@@ -348,7 +349,7 @@ void EstimationManager::configure_timers()
 
   RCLCPP_INFO(get_logger(), "Timers configured.");
 }
-//}
+/*//}*/
 
 /* configure_services() //{ */
 void EstimationManager::configure_services()
@@ -356,10 +357,10 @@ void EstimationManager::configure_services()
   RCLCPP_INFO(get_logger(), "Configuring services... ");
   set_odometry_service_ = this->create_service<laser_msgs::srv::SetString>(
     "~/set_odometry", std::bind(
-                        &EstimationManager::set_odometry_service_callback, this,
-                        std::placeholders::_1, std::placeholders::_2));
+                        &EstimationManager::set_odometry_callback, this, std::placeholders::_1,
+                        std::placeholders::_2));
 }
-//}
+/*//}*/
 
 /* setup_ekf() //{ */
 void EstimationManager::setup_ekf()
@@ -405,13 +406,12 @@ void EstimationManager::setup_ekf()
 
   RCLCPP_INFO(get_logger(), "EKF configured.");
 }
-//}
+/*//}*/
 
-/* px4_odometry_callback() //{ */
-void EstimationManager::px4_odometry_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+/* odometry_px4_callback() //{ */
+void EstimationManager::odometry_px4_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(px4_odom_data_.mtx);
-  px4_odom_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000,
     "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz",
@@ -422,18 +422,17 @@ void EstimationManager::px4_odometry_callback(const nav_msgs::msg::Odometry::Sha
           (rclcpp::Time(msg->header.stamp) - rclcpp::Time(px4_odom_data_.last_msg->header.stamp))
             .seconds())
        : 0.0));
+  px4_odom_data_.is_active = true;
   px4_odom_data_.last_msg = msg;
 }
-//}
+/*//}*/
 
-/* openvins_odometry_callback() //{ */
-void EstimationManager::openvins_odometry_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+/* odometry_openvins_callback() //{ */
+void EstimationManager::odometry_openvins_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(openvins_odom_data_.mtx);
-  openvins_odom_data_.buffer[msg->header.stamp] = msg;
-  if (enable_openvins_odom_) {
+  if (enable_openvins_odom_)
     odom_pub_->publish(*msg);
-  }
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000,
     "Received OpenVins odometry message at time %.3f s, frequency: %.2f Hz",
@@ -443,15 +442,15 @@ void EstimationManager::openvins_odometry_callback(const nav_msgs::msg::Odometry
                  rclcpp::Time(openvins_odom_data_.last_msg->header.stamp))
                   .seconds())
        : 0.0));
+  openvins_odom_data_.is_active = true;
   openvins_odom_data_.last_msg = msg;
 }
-//}
+/*//}*/
 
-/* fast_lio_odometry_callback() //{ */
-void EstimationManager::fast_lio_odometry_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+/* odometry_fast_lio_callback() //{ */
+void EstimationManager::odometry_fast_lio_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(fast_lio_odom_data_.mtx);
-  fast_lio_odom_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000,
     "Received Fast-LIO odometry message at time %.3f s, frequency: %.2f Hz",
@@ -461,16 +460,16 @@ void EstimationManager::fast_lio_odometry_callback(const nav_msgs::msg::Odometry
                  rclcpp::Time(fast_lio_odom_data_.last_msg->header.stamp))
                   .seconds())
        : 0.0));
+  fast_lio_odom_data_.is_active = true;
   fast_lio_odom_data_.last_msg = msg;
 }
-//}
+/*//}*/
 
 /* control_callback() //{ */
 void EstimationManager::control_callback(
   const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(control_data_.mtx);
-  control_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000, "Received control message at time %.3f s, frequency: %.2f Hz",
     msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
@@ -479,28 +478,48 @@ void EstimationManager::control_callback(
           (rclcpp::Time(msg->header.stamp) - rclcpp::Time(control_data_.last_msg->header.stamp))
             .seconds())
        : 0.0));
+
+  last_control_msg_ = control_data_.last_msg;
   control_data_.last_msg = msg;
+  control_data_.is_active = true;
   mekf_->set_mass(msg->estimated_mass);
 }
-//}
+/*//}*/
 
-// Fixed: Implemented missing Garmin subscription callback
-/* garmin_callback() //{ */
-void EstimationManager::garmin_callback(const sensor_msgs::msg::Range::SharedPtr msg)
+/* garmin_range_callback() //{ */
+void EstimationManager::garmin_range_callback(const sensor_msgs::msg::Range::SharedPtr msg)
 {
+  if (!garmin_offset_calibrated_) {
+    RCLCPP_DEBUG(get_logger(), "Calibrating Garmin sensor... %d/500", garmin_counter_);
+    if (garmin_counter_ < 500) {
+      garmin_counter_++;
+      garmin_calibrated_offset_ += msg->range;
+    }
+    if (garmin_counter_ == 500) {
+      garmin_calibrated_offset_ /= 500.0;
+      RCLCPP_INFO(get_logger(), "Calibrated Garmin offset: %.3f m", garmin_calibrated_offset_);
+      garmin_offset_calibrated_ = true;
+    }
+    return;
+  }
+  msg->range -= garmin_calibrated_offset_;
+
   std::lock_guard<std::mutex> lock(garmin_data_.mtx);
-  garmin_data_.buffer[msg->header.stamp] = msg;
+  garmin_data_.is_active = true;
+  RCLCPP_DEBUG_THROTTLE(
+    get_logger(), *get_clock(), 10000,
+    "Received Garmin range message at time %.3f s, frequency: %.2f Hz",
+    msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
+    ((garmin_data_.last_msg != nullptr) ? (1.0 / (rclcpp::Time(msg->header.stamp) -
+                                                  rclcpp::Time(garmin_data_.last_msg->header.stamp))
+                                                   .seconds())
+                                        : 0.0));
   garmin_data_.last_msg = msg;
 }
-//}
+/*//}*/
 
-/**
- * @brief Service callback to switch active odometry sources online.
- * Performs consistency checks (position, orientation, and velocity thresholds) against the current
- * EKF estimate to prevent dangerous jumps in the estimated state.
- */
-/* set_odometry_service_callback() //{ */
-void EstimationManager::set_odometry_service_callback(
+/* set_odometry_callback() //{ */
+void EstimationManager::set_odometry_callback(
   const std::shared_ptr<laser_msgs::srv::SetString::Request> request,
   std::shared_ptr<laser_msgs::srv::SetString::Response> response)
 {
@@ -530,13 +549,12 @@ void EstimationManager::set_odometry_service_callback(
   }
 
   SensorDataBuffer<nav_msgs::msg::Odometry> * selected_odom_data = nullptr;
-  if (new_source == "openvins_odom") {
+  if (new_source == "openvins_odom")
     selected_odom_data = &openvins_odom_data_;
-  } else if (new_source == "fast_lio_odom") {
+  else if (new_source == "fast_lio_odom")
     selected_odom_data = &fast_lio_odom_data_;
-  } else if (new_source == "px4_api_odom") {
+  else if (new_source == "px4_api_odom")
     selected_odom_data = &px4_odom_data_;
-  }
 
   std::lock_guard<std::mutex> odom_lock(selected_odom_data->mtx);
   if (selected_odom_data->buffer.empty()) {
@@ -557,7 +575,6 @@ void EstimationManager::set_odometry_service_callback(
     return;
   }
 
-  // Validate consistency between the new odometry source and the current state estimate
   const nav_msgs::msg::Odometry & current_state = mekf_->get_odometry();
   const auto & new_odom_pose = newest_msg_it->second->pose.pose;
 
@@ -633,110 +650,69 @@ void EstimationManager::set_odometry_service_callback(
   response->message = "Odometry source switched to: " + current_active_odometry_name_;
   RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
 }
-//}
+/*//}*/
 
 /**
- * @brief Retrieves the message from the buffer that best matches the reference timestamp
- * within the acceptable tolerance window.
+ * @brief Thread-safe buffer integrity check considering delays and timeouts.
  */
-/* get_synchronized_message() //{ */
+/* is_buffer_valid() //{ */
 template <typename MsgT>
-std::optional<MsgT> EstimationManager::get_synchronized_message(
-  const rclcpp::Time & ref_time, SensorDataBuffer<MsgT> & sensor_data, std::string sensor_name)
+bool EstimationManager::is_buffer_valid(
+  SensorDataBuffer<MsgT> & sensor_buffer, const std::string & sensor_name,
+  const rclcpp::Time & reference_time, rclcpp::Logger logger, rclcpp::Clock::SharedPtr clock)
 {
-  std::lock_guard<std::mutex> lock(sensor_data.mtx);
-  if (sensor_data.buffer.empty()) {
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 2000, "[%s]: Message buffer empty.", sensor_name.c_str());
-    return std::nullopt;
+  std::lock_guard<std::mutex> lock(sensor_buffer.mtx);
+
+  if (!sensor_buffer.last_msg) {
+    RCLCPP_DEBUG(logger, "[%s]: Nenhuma mensagem recebida ainda.", sensor_name.c_str());
+    return false;
   }
 
-  auto newest_msg_it = sensor_data.buffer.rbegin();
-  if ((ref_time - rclcpp::Time(sensor_data.last_msg->header.stamp)) > sensor_data.timeout) {
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 2000,
-      "[%s]: Timeout detected. Last msg is %.2f s old. Timeout is %.2f s.", sensor_name.c_str(),
-      (ref_time - rclcpp::Time(sensor_data.last_msg->header.stamp)).seconds(),
-      sensor_data.timeout.seconds());
-    return std::nullopt;
+  if (
+    sensor_buffer.last_msg->header.stamp.sec == 0 &&
+    sensor_buffer.last_msg->header.stamp.nanosec == 0) {
+    RCLCPP_WARN(
+      logger, "[%s]: Mensagem com timestamp zerado (0) detectada. Ignorando.", sensor_name.c_str());
+    return false;
   }
 
-  typename std::map<rclcpp::Time, typename MsgT::SharedPtr>::iterator best_match_it =
-    sensor_data.buffer.end();
-  rclcpp::Duration min_diff = rclcpp::Duration::max();
+  const rclcpp::Time msg_time(sensor_buffer.last_msg->header.stamp);
+  rclcpp::Duration age = reference_time - msg_time;
 
-  for (auto it = sensor_data.buffer.begin(); it != sensor_data.buffer.end(); ++it) {
-    rclcpp::Duration diff = ref_time - it->first;
-    if (std::abs(diff.seconds()) < min_diff.seconds()) {
-      min_diff = rclcpp::Duration::from_seconds(std::abs(diff.seconds()));
-      best_match_it = it;
-    }
+  if (age > sensor_buffer.timeout) {
+    RCLCPP_WARN(
+      logger,
+      "[%s]: Timeout detectado! Mensagem tem %.3f s de atraso. Limite max (timeout) eh %.3f s.",
+      sensor_name.c_str(), age.seconds(), sensor_buffer.timeout.seconds());
+    sensor_buffer.is_active = false;
+    return false;
+  }
+  if (age > sensor_buffer.tolerance) {
+    RCLCPP_WARN(
+      logger,
+      "[%s]: Timeout detectado! Mensagem tem %.3f s de atraso. Limite max (timeout) eh %.3f s.",
+      sensor_name.c_str(), age.seconds(), sensor_buffer.timeout.seconds());
+    return false;
   }
 
-  if (best_match_it == sensor_data.buffer.end()) {
-    return std::nullopt;
-  }
-
-  if (min_diff <= sensor_data.tolerance) {
-    std::optional<MsgT> msg_copy = *best_match_it->second;
-    sensor_data.is_active = true;
-    sensor_data.buffer.erase(best_match_it);
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 10000,
-      "[%s]: ACCEPTED: Best match (%.2f ms) within tolerance (%.2f ms).", sensor_name.c_str(),
-      min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
-    return msg_copy;
-  }
-
-  RCLCPP_DEBUG(
-    get_logger(), "[%s]: REJECTED: Best match (%.2f ms) is outside tolerance (%.2f ms).",
-    sensor_name.c_str(), min_diff.seconds() * 1000.0, sensor_data.tolerance.seconds() * 1000.0);
-
-  return std::nullopt;
+  return true;
 }
-//}
+/*//}*/
 
 /**
- * @brief Removes obsolete sensor data exceeding twice the timeout threshold from the buffer.
- */
-/* prune_sensor_buffer() //{ */
-template <typename MsgT>
-void EstimationManager::prune_sensor_buffer(
-  const rclcpp::Time & now, SensorDataBuffer<MsgT> & sensor_data, std::string sensor_name)
-{
-  std::lock_guard<std::mutex> lock(sensor_data.mtx);
-  if (sensor_data.buffer.empty()) {
-    return;
-  }
-
-  const rclcpp::Time cutoff_time = now - (sensor_data.timeout * 2.0);
-
-  auto first_to_keep_it = sensor_data.buffer.upper_bound(cutoff_time);
-
-  RCLCPP_DEBUG_THROTTLE(
-    get_logger(), *get_clock(), 10000, "[%s] Pruning sensor buffer. %s, first kept time: %.2f s",
-    sensor_name.c_str(),
-    (first_to_keep_it != sensor_data.buffer.begin() ? "Removing old messages."
-                                                    : "No messages to remove."),
-    (first_to_keep_it != sensor_data.buffer.begin() && first_to_keep_it != sensor_data.buffer.end())
-      ? rclcpp::Time(first_to_keep_it->first).seconds()
-      : 0.0);
-  sensor_data.buffer.erase(sensor_data.buffer.begin(), first_to_keep_it);
-}
-//}
-
-/**
- * @brief Main estimation loop.
- * Matches control input timestamps with sensor measurements, executes EKF state prediction
- * using thrust commands, and corrects the estimate using active odometry measurements.
+ * @brief High-frequency loop evaluating measurements and applying
+ * EKF prediction/correction steps.
  */
 /* timer_callback() //{ */
 void EstimationManager::timer_callback()
 {
+  RCLCPP_DEBUG(
+    get_logger(),
+    "\n_________________________________________________________________________________________");
+  RCLCPP_DEBUG(get_logger(), "Timer callback()");
   try {
-    if (!is_active_) {
+    if (!is_active_)
       return;
-    }
     if (!is_initialized_) {
       RCLCPP_INFO(get_logger(), "Initializing EKF...");
       is_initialized_ = true;
@@ -745,49 +721,68 @@ void EstimationManager::timer_callback()
 
     rclcpp::Time reference_time;
 
-    if (control_data_.buffer.empty()) {
-      reference_time = this->get_clock()->now();
-    } else {
-      reference_time = control_data_.buffer.rbegin()->first;
-      if ((this->get_clock()->now() - reference_time) > control_data_.timeout) {
-        RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "Control input timeout detected. Last control message received %.2f s ago.",
-          (this->get_clock()->now() - reference_time).seconds());
-        reference_time = this->get_clock()->now();
-      }
-    }
+    reference_time = this->get_clock()->now();
 
-    auto px4_odom_msg = get_synchronized_message(reference_time, px4_odom_data_, "PX4_ODOMETRY");
+    RCLCPP_DEBUG(get_logger(), "Timer: %.3f s", reference_time.seconds());
+
+    auto px4_odom_msg = px4_odom_data_.last_msg
+                          ? std::optional<nav_msgs::msg::Odometry>(*px4_odom_data_.last_msg)
+                          : std::nullopt;
     auto openvins_odom_msg =
-      get_synchronized_message(reference_time, openvins_odom_data_, "OPENVINS_ODOMETRY");
+      openvins_odom_data_.last_msg
+        ? std::optional<nav_msgs::msg::Odometry>(*openvins_odom_data_.last_msg)
+        : std::nullopt;
     auto fast_lio_odom_msg =
-      get_synchronized_message(reference_time, fast_lio_odom_data_, "FAST_LIO_ODOMETRY");
-    auto control_msg = get_synchronized_message(reference_time, control_data_, "CONTROL");
+      fast_lio_odom_data_.last_msg
+        ? std::optional<nav_msgs::msg::Odometry>(*fast_lio_odom_data_.last_msg)
+        : std::nullopt;
+    auto garmin_range_msg = garmin_data_.last_msg
+                              ? std::optional<sensor_msgs::msg::Range>(*garmin_data_.last_msg)
+                              : std::nullopt;
+    auto control_msg = last_control_msg_
+                         ? std::optional<laser_msgs::msg::UavControlDiagnostics>(*last_control_msg_)
+                         : std::nullopt;
 
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 10000,
-      "Synchronized Messages - PX4 Odom: %s, OpenVINS Odom: %s, FastLIO Odom: %s, Control: %s",
-      px4_odom_msg ? "YES" : "NO", openvins_odom_msg ? "YES" : "NO",
-      fast_lio_odom_msg ? "YES" : "NO", control_msg ? "YES" : "NO");
-    RCLCPP_DEBUG_THROTTLE(
-      get_logger(), *get_clock(), 10000,
-      "Buffer Sizes - PX4 Odom: %zu, OpenVINS Odom: %zu, FastLIO Odom: %zu, Control: %zu",
-      px4_odom_data_.buffer.size(), openvins_odom_data_.buffer.size(),
-      fast_lio_odom_data_.buffer.size(), control_data_.buffer.size());
+    if (!is_buffer_valid(px4_odom_data_, "PX4_Odom", reference_time, get_logger(), get_clock()))
+      px4_odom_msg = std::nullopt;
+    if (!is_buffer_valid(
+          openvins_odom_data_, "OpenVINS_Odom", reference_time, get_logger(), get_clock()))
+      openvins_odom_msg = std::nullopt;
+    if (!is_buffer_valid(
+          fast_lio_odom_data_, "FastLIO_Odom", reference_time, get_logger(), get_clock()))
+      fast_lio_odom_msg = std::nullopt;
+    if (!is_buffer_valid(garmin_data_, "Garmin", reference_time, get_logger(), get_clock()))
+      garmin_range_msg = std::nullopt;
+    if (!is_buffer_valid(control_data_, "Control", reference_time, get_logger(), get_clock()))
+      control_msg = std::nullopt;
 
-    prune_sensor_buffer(reference_time, px4_odom_data_, "PX4_ODOMETRY");
-    prune_sensor_buffer(reference_time, openvins_odom_data_, "OPENVINS_ODOMETRY");
-    prune_sensor_buffer(reference_time, fast_lio_odom_data_, "FAST_LIO_ODOMETRY");
-    prune_sensor_buffer(reference_time, control_data_, "CONTROL");
+    auto stamp_to_seconds = [](const auto & msg) {
+      return static_cast<double>(msg.header.stamp.sec) +
+             static_cast<double>(msg.header.stamp.nanosec) * 1e-9;
+    };
+
+    RCLCPP_DEBUG(
+      get_logger(), "PX4 odometry message: %s, time: %.3f s", px4_odom_msg ? "YES" : "NO",
+      px4_odom_msg ? stamp_to_seconds(px4_odom_msg.value()) : 0.0);
+    RCLCPP_DEBUG(
+      get_logger(), "OpenVINS odometry message: %s, time: %.3f s", openvins_odom_msg ? "YES" : "NO",
+      openvins_odom_msg ? stamp_to_seconds(openvins_odom_msg.value()) : 0.0);
+    RCLCPP_DEBUG(
+      get_logger(), "Fast-LIO odometry message: %s, time: %.3f s", fast_lio_odom_msg ? "YES" : "NO",
+      fast_lio_odom_msg ? stamp_to_seconds(fast_lio_odom_msg.value()) : 0.0);
+    RCLCPP_DEBUG(
+      get_logger(), "Garmin range message: %s, time: %.3f s", garmin_range_msg ? "YES" : "NO",
+      garmin_range_msg ? stamp_to_seconds(garmin_range_msg.value()) : 0.0);
+    RCLCPP_DEBUG(
+      get_logger(), "Control message: %s, time: %.3f s", control_msg ? "YES" : "NO",
+      control_msg ? stamp_to_seconds(control_msg.value()) : 0.0);
 
     bool has_prediction{false};
     const double MAX_CONTROL_VALUE = 1.0e2;
 
     if (enable_px4_odom_ && !px4_odom_data_.is_active) {
-      if (!px4_odom_data_.is_active) {
+      if (!px4_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000, "PX4 odometry input is inactive.");
-      }
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 10000,
@@ -801,10 +796,9 @@ void EstimationManager::timer_callback()
     }
 
     if (enable_fast_lio_odom_ && !fast_lio_odom_data_.is_active) {
-      if (!fast_lio_odom_data_.is_active) {
+      if (!fast_lio_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 10000, "Fast-LIO odometry input is inactive.");
-      }
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 10000,
@@ -818,10 +812,9 @@ void EstimationManager::timer_callback()
     }
 
     if (enable_openvins_odom_ && !openvins_odom_data_.is_active) {
-      if (!openvins_odom_data_.is_active) {
+      if (!openvins_odom_data_.is_active)
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 10000, "OpenVINS odometry input is inactive.");
-      }
       if (!is_ekf_active_) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 10000,
@@ -835,8 +828,32 @@ void EstimationManager::timer_callback()
 
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
 
-    // Step 1: Execute EKF State Prediction using actuator commands or hover assumption
-    if (control_msg) {
+    bool has_measurement{false};
+    laser_uav_estimators::MeasurementPackage measurement;
+
+    if (px4_odom_msg && enable_px4_odom_) {
+      has_measurement = true;
+      measurement.odometry = &(*px4_odom_msg);
+      last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
+    } else if (openvins_odom_msg && enable_openvins_odom_) {
+      has_measurement = true;
+      measurement.odometry = &(*openvins_odom_msg);
+      last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
+    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+      has_measurement = true;
+      measurement.odometry = &(*fast_lio_odom_msg);
+      last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
+    }
+
+    if (garmin_range_msg) {
+      measurement.garmin = &(*garmin_range_msg);
+    }
+
+    RCLCPP_DEBUG(
+      get_logger(), "Prediction and Correction - control_msg: %s, update_msg: %s",
+      control_msg ? "YES" : "NO", has_measurement ? "YES" : "NO");
+
+    if (control_msg && has_measurement) {
       RCLCPP_INFO_ONCE(get_logger(), "Running Prediction with Control Manager Thrust.");
 
       if (!is_first_control_msg_) {
@@ -844,24 +861,37 @@ void EstimationManager::timer_callback()
         is_first_control_msg_ = true;
         return;
       } else {
-        rclcpp::Time current_time = rclcpp::Time(control_msg->header.stamp);
-        double dt_sec = (current_time - last_control_input_time_).seconds();
+        rclcpp::Time current_time = last_update_time_;
+        rclcpp::Time control_input_time = rclcpp::Time(control_msg->header.stamp);
+        double dt_last_time = (last_update_time_ - control_input_time).seconds();
+
         last_control_input_time_ = current_time;
 
+        RCLCPP_DEBUG(get_logger(), "Current time: %.3f s", current_time.seconds());
+        RCLCPP_DEBUG(
+          get_logger(), "Last control input time: %.3f s", last_control_input_time_.seconds());
+        RCLCPP_DEBUG(get_logger(), "Update Time: %.3f s", last_update_time_.seconds());
+        RCLCPP_DEBUG(get_logger(), "Time since last update: %.3f s", dt_last_time);
+
+        if (measurement.garmin != nullptr) {
+          double dt_garmin_time =
+            (last_update_time_ - rclcpp::Time(measurement.garmin->header.stamp)).seconds();
+          RCLCPP_DEBUG(get_logger(), "Time since last Garmin measurement: %.3f s", dt_garmin_time);
+        }
+
         bool can_predict = true;
-        // Fixed: Replaced undeclared dt_last_time with dt_sec
-        if (dt_sec < 0 || dt_sec > 1.0) {
+        if (dt_last_time < 0 || dt_last_time > 1.0) {
           can_predict = false;
         }
 
         if (
-          can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
+          can_predict && control_msg->last_control_input.data.size() !=
+                           static_cast<size_t>(allocation_matrix_.cols())) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
-          // Fixed: Cast allocation_matrix_.cols() to int to resolve %d formatting warning
-          RCLCPP_WARN_THROTTLE(
-            get_logger(), *get_clock(), 10000,
-            "Control input size does not match number of motors (%d). Resizing input vector.",
-            static_cast<int>(allocation_matrix_.cols()));
+          RCLCPP_ERROR_THROTTLE(
+            get_logger(), *get_clock(), 5000,
+            "Control input size does not match number of motors (%ld). Resizing input vector.",
+            allocation_matrix_.cols());
         }
 
         if (can_predict) {
@@ -886,11 +916,19 @@ void EstimationManager::timer_callback()
           }
 
           if (can_predict) {
-            // Fixed: Replaced undeclared dt_last_time with dt_sec
-            mekf_->predict(control_input, dt_sec);
+            mekf_->predict(control_input, dt_last_time);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
             has_prediction = true;
             is_predicted_ = true;
+          }
+
+          if (is_first_control_msg_) {
+            if (has_measurement) {
+              mekf_->correct(measurement);
+              if (measurement.odometry != nullptr) {
+                last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
+              }
+            }
           }
         }
       }
@@ -904,31 +942,19 @@ void EstimationManager::timer_callback()
         Eigen::Vector4d::Constant((9.81 * mekf_->get_mass()) / 4));
 
       mekf_->predict(control_input, 0.01);
+
+      if (has_measurement) {
+        mekf_->correct(measurement);
+        if (measurement.odometry != nullptr) {
+          last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
+        }
+      }
+
       rclcpp::Time stamp = this->get_clock()->now();
       has_prediction = true;
       is_predicted_ = true;
     }
 
-    // Step 2: Execute EKF Measurement Correction using active odometry source
-    // Fixed: Removed duplicated and out-of-scope correction chunks from inside prediction blocks
-    bool has_measurement{false};
-    if (is_predicted_) {
-      if (px4_odom_msg && enable_px4_odom_) {
-        has_measurement = true;
-        mekf_->correct(*px4_odom_msg);
-        last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
-      } else if (openvins_odom_msg && enable_openvins_odom_) {
-        has_measurement = true;
-        mekf_->correct(*openvins_odom_msg);
-        last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
-      } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
-        has_measurement = true;
-        mekf_->correct(*fast_lio_odom_msg);
-        last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
-      }
-    }
-
-    // Step 3: Publish estimated state and broadcast dynamic transforms
     if ((has_prediction || has_measurement) && !enable_openvins_odom_) {
       publish_odometry(odom_pub_, last_update_time_);
       is_ekf_active_ = true;
@@ -942,34 +968,32 @@ void EstimationManager::timer_callback()
       }
     }
   } catch (const std::exception & e) {
-    RCLCPP_ERROR(get_logger(), "Error in timerCallback: %s", e.what());
+    RCLCPP_ERROR(get_logger(), "Error in timer_callback: %s", e.what());
   }
 }
-//}
+/*//}*/
 
 /* diagnostics_timer_callback() //{ */
 void EstimationManager::diagnostics_timer_callback()
 {
-  if (!is_active_) {
+  if (!is_active_)
     return;
-  }
   try {
     auto diag_msg = std::make_unique<laser_msgs::msg::EstimationManagerDiagnostics>();
     diag_msg->header.stamp = this->get_clock()->now();
 
     if (
       current_active_odometry_name_ == "px4_api_odom" && px4_odom_data_.is_active &&
-      !px4_odom_data_.buffer.empty()) {
+      !px4_odom_data_.buffer.empty())
       diag_msg->header.frame_id = px4_odom_data_.buffer.begin()->second->header.frame_id;
-    } else if (
+    else if (
       current_active_odometry_name_ == "openvins_odom" && openvins_odom_data_.is_active &&
-      !openvins_odom_data_.buffer.empty()) {
+      !openvins_odom_data_.buffer.empty())
       diag_msg->header.frame_id = openvins_odom_data_.buffer.begin()->second->header.frame_id;
-    } else if (
+    else if (
       current_active_odometry_name_ == "fast_lio_odom" && fast_lio_odom_data_.is_active &&
-      !fast_lio_odom_data_.buffer.empty()) {
+      !fast_lio_odom_data_.buffer.empty())
       diag_msg->header.frame_id = fast_lio_odom_data_.buffer.begin()->second->header.frame_id;
-    }
 
     std::lock_guard<std::mutex> lock(mtx_);
 
@@ -1033,12 +1057,8 @@ void EstimationManager::diagnostics_timer_callback()
     RCLCPP_ERROR(get_logger(), "Error publishing diagnostics: %s", e.what());
   }
 }
-//}
+/*//}*/
 
-/**
- * @brief Publishes filtered odometry and broadcasts dynamic TF transformations between
- * the world frame and the Flight Control Unit (FCU).
- */
 /* publish_odometry() //{ */
 void EstimationManager::publish_odometry(
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub,
@@ -1075,7 +1095,7 @@ void EstimationManager::publish_odometry(
     RCLCPP_WARN(this->get_logger(), "Error on TF: %s", ex.what());
   }
 }
-//}
+/*//}*/
 }  // namespace laser_uav_managers
 
 RCLCPP_COMPONENTS_REGISTER_NODE(laser_uav_managers::EstimationManager)
