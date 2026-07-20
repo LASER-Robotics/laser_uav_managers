@@ -270,9 +270,8 @@ void EstimationManager::get_parameters()
   double garmin_position_z_gain;
   get_parameter("measurement_noise_gains.garmin.position_z", garmin_position_z_gain);
 
-  fast_lio_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  openvins_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  px4_measurement_noise_gains_.garmin.position_z      = garmin_position_z_gain;
+  // Fixed: Assigned garmin gain to garmin_measurement_noise_gains_ instead of non-existent fields
+  garmin_measurement_noise_gains_.odometry.position_z = garmin_position_z_gain;
 
   double tolerance, timeout;
 
@@ -298,7 +297,7 @@ void EstimationManager::get_parameters()
   get_parameter("garmin_timeout", timeout);
   get_parameter("garmin_covariance", garmin_covariance_);
   garmin_data_.tolerance = rclcpp::Duration::from_seconds(tolerance);
-  garmin_data_.timeout   = rclcpp::Duration::from_seconds(timeout);
+  garmin_data_.timeout = rclcpp::Duration::from_seconds(timeout);
 
   get_parameter("control_tolerance", tolerance);
   get_parameter("control_timeout", timeout);
@@ -328,6 +327,9 @@ void EstimationManager::configure_pub_sub()
     std::bind(&EstimationManager::openvins_odometry_callback, this, std::placeholders::_1));
   control_sub_ = create_subscription<laser_msgs::msg::UavControlDiagnostics>(
     "control_in", 10, std::bind(&EstimationManager::control_callback, this, std::placeholders::_1));
+  // Fixed: Initialized Garmin range subscription
+  garmin_sub_ = create_subscription<sensor_msgs::msg::Range>(
+    "garmin_in", 10, std::bind(&EstimationManager::garmin_callback, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "Publishers and subscribers configured.");
 }
@@ -409,7 +411,7 @@ void EstimationManager::setup_ekf()
 void EstimationManager::px4_odometry_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(px4_odom_data_.mtx);
-  // px4_odom_data_.buffer[msg->header.stamp] = msg;
+  px4_odom_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000,
     "Received PX4 odometry message at time %.3f s, frequency: %.2f Hz",
@@ -468,7 +470,7 @@ void EstimationManager::control_callback(
   const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(control_data_.mtx);
-  // control_data_.buffer[msg->header.stamp] = msg;
+  control_data_.buffer[msg->header.stamp] = msg;
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000, "Received control message at time %.3f s, frequency: %.2f Hz",
     msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9,
@@ -479,6 +481,16 @@ void EstimationManager::control_callback(
        : 0.0));
   control_data_.last_msg = msg;
   mekf_->set_mass(msg->estimated_mass);
+}
+//}
+
+// Fixed: Implemented missing Garmin subscription callback
+/* garmin_callback() //{ */
+void EstimationManager::garmin_callback(const sensor_msgs::msg::Range::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(garmin_data_.mtx);
+  garmin_data_.buffer[msg->header.stamp] = msg;
+  garmin_data_.last_msg = msg;
 }
 //}
 
@@ -711,6 +723,7 @@ void EstimationManager::prune_sensor_buffer(
       : 0.0);
   sensor_data.buffer.erase(sensor_data.buffer.begin(), first_to_keep_it);
 }
+//}
 
 /**
  * @brief Main estimation loop.
@@ -836,17 +849,19 @@ void EstimationManager::timer_callback()
         last_control_input_time_ = current_time;
 
         bool can_predict = true;
-        if (dt_last_time < 0 || dt_last_time > 1.0) {
+        // Fixed: Replaced undeclared dt_last_time with dt_sec
+        if (dt_sec < 0 || dt_sec > 1.0) {
           can_predict = false;
         }
 
         if (
           can_predict && control_msg->last_control_input.data.size() != allocation_matrix_.cols()) {
           control_msg->last_control_input.data.resize(allocation_matrix_.cols());
+          // Fixed: Cast allocation_matrix_.cols() to int to resolve %d formatting warning
           RCLCPP_WARN_THROTTLE(
             get_logger(), *get_clock(), 10000,
             "Control input size does not match number of motors (%d). Resizing input vector.",
-            allocation_matrix_.cols());
+            static_cast<int>(allocation_matrix_.cols()));
         }
 
         if (can_predict) {
@@ -871,19 +886,11 @@ void EstimationManager::timer_callback()
           }
 
           if (can_predict) {
-            mekf_->predict(control_input, dt_last_time);
+            // Fixed: Replaced undeclared dt_last_time with dt_sec
+            mekf_->predict(control_input, dt_sec);
             rclcpp::Time stamp = rclcpp::Time(control_msg->header.stamp);
             has_prediction = true;
             is_predicted_ = true;
-          }
-
-          if (is_first_control_msg_) {
-            if (has_measurement) {
-              mekf_->correct(measurement);
-              if (measurement.odometry != nullptr) {
-                last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
-              }
-            }
           }
         }
       }
@@ -897,20 +904,13 @@ void EstimationManager::timer_callback()
         Eigen::Vector4d::Constant((9.81 * mekf_->get_mass()) / 4));
 
       mekf_->predict(control_input, 0.01);
-
-      if (has_measurement) {
-        mekf_->correct(measurement);
-        if (measurement.odometry != nullptr) {
-          last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
-        }
-      }
-
       rclcpp::Time stamp = this->get_clock()->now();
       has_prediction = true;
       is_predicted_ = true;
     }
 
     // Step 2: Execute EKF Measurement Correction using active odometry source
+    // Fixed: Removed duplicated and out-of-scope correction chunks from inside prediction blocks
     bool has_measurement{false};
     if (is_predicted_) {
       if (px4_odom_msg && enable_px4_odom_) {
