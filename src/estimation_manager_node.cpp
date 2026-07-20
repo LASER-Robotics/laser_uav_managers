@@ -270,9 +270,7 @@ void EstimationManager::get_parameters()
   double garmin_position_z_gain;
   get_parameter("measurement_noise_gains.garmin.position_z", garmin_position_z_gain);
 
-  fast_lio_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  openvins_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
-  px4_measurement_noise_gains_.garmin.position_z = garmin_position_z_gain;
+  garmin_measurement_noise_gains_.odometry.position_z = garmin_position_z_gain;
 
   double tolerance, timeout;
 
@@ -659,7 +657,7 @@ void EstimationManager::set_odometry_callback(
 template <typename MsgT>
 bool EstimationManager::is_buffer_valid(
   SensorDataBuffer<MsgT> & sensor_buffer, const std::string & sensor_name,
-  const rclcpp::Time & reference_time, rclcpp::Logger logger, rclcpp::Clock::SharedPtr clock)
+  const rclcpp::Time & reference_time, rclcpp::Logger logger)
 {
   std::lock_guard<std::mutex> lock(sensor_buffer.mtx);
 
@@ -743,17 +741,15 @@ void EstimationManager::timer_callback()
                          ? std::optional<laser_msgs::msg::UavControlDiagnostics>(*last_control_msg_)
                          : std::nullopt;
 
-    if (!is_buffer_valid(px4_odom_data_, "PX4_Odom", reference_time, get_logger(), get_clock()))
+    if (!is_buffer_valid(px4_odom_data_, "PX4_Odom", reference_time, get_logger()))
       px4_odom_msg = std::nullopt;
-    if (!is_buffer_valid(
-          openvins_odom_data_, "OpenVINS_Odom", reference_time, get_logger(), get_clock()))
+    if (!is_buffer_valid(openvins_odom_data_, "OpenVINS_Odom", reference_time, get_logger()))
       openvins_odom_msg = std::nullopt;
-    if (!is_buffer_valid(
-          fast_lio_odom_data_, "FastLIO_Odom", reference_time, get_logger(), get_clock()))
+    if (!is_buffer_valid(fast_lio_odom_data_, "FastLIO_Odom", reference_time, get_logger()))
       fast_lio_odom_msg = std::nullopt;
-    if (!is_buffer_valid(garmin_data_, "Garmin", reference_time, get_logger(), get_clock()))
+    if (!is_buffer_valid(garmin_data_, "Garmin", reference_time, get_logger()))
       garmin_range_msg = std::nullopt;
-    if (!is_buffer_valid(control_data_, "Control", reference_time, get_logger(), get_clock()))
+    if (!is_buffer_valid(control_data_, "Control", reference_time, get_logger()))
       control_msg = std::nullopt;
 
     auto stamp_to_seconds = [](const auto & msg) {
@@ -828,25 +824,11 @@ void EstimationManager::timer_callback()
 
     RCLCPP_INFO_ONCE(get_logger(), "Starting EKF updates.");
 
-    bool has_measurement{false};
-    laser_uav_estimators::MeasurementPackage measurement;
-
-    if (px4_odom_msg && enable_px4_odom_) {
+    bool has_measurement = false;
+    if (
+      (px4_odom_msg && enable_px4_odom_) || (openvins_odom_msg && enable_openvins_odom_) ||
+      (fast_lio_odom_msg && enable_fast_lio_odom_)) {
       has_measurement = true;
-      measurement.odometry = &(*px4_odom_msg);
-      last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
-    } else if (openvins_odom_msg && enable_openvins_odom_) {
-      has_measurement = true;
-      measurement.odometry = &(*openvins_odom_msg);
-      last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
-    } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
-      has_measurement = true;
-      measurement.odometry = &(*fast_lio_odom_msg);
-      last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
-    }
-
-    if (garmin_range_msg) {
-      measurement.garmin = &(*garmin_range_msg);
     }
 
     RCLCPP_DEBUG(
@@ -873,9 +855,9 @@ void EstimationManager::timer_callback()
         RCLCPP_DEBUG(get_logger(), "Update Time: %.3f s", last_update_time_.seconds());
         RCLCPP_DEBUG(get_logger(), "Time since last update: %.3f s", dt_last_time);
 
-        if (measurement.garmin != nullptr) {
+        if (garmin_range_msg) {
           double dt_garmin_time =
-            (last_update_time_ - rclcpp::Time(measurement.garmin->header.stamp)).seconds();
+            (last_update_time_ - rclcpp::Time(garmin_range_msg->header.stamp)).seconds();
           RCLCPP_DEBUG(get_logger(), "Time since last Garmin measurement: %.3f s", dt_garmin_time);
         }
 
@@ -924,10 +906,23 @@ void EstimationManager::timer_callback()
 
           if (is_first_control_msg_) {
             if (has_measurement) {
-              mekf_->correct(measurement);
-              if (measurement.odometry != nullptr) {
-                last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
+              if (px4_odom_msg && enable_px4_odom_) {
+                mekf_->correct(*px4_odom_msg);
+                last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
+              } else if (openvins_odom_msg && enable_openvins_odom_) {
+                mekf_->correct(*openvins_odom_msg);
+                last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
+              } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+                mekf_->correct(*fast_lio_odom_msg);
+                last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
               }
+            }
+            if (garmin_range_msg) {
+              // TODO: Update laser_uav_estimators to support Range messages.
+              // mekf_->correct(*garmin_range_msg);
+              RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 5000,
+                "Garmin correction skipped: MEKFEstimator lacks correct(Range) overload.");
             }
           }
         }
@@ -944,10 +939,23 @@ void EstimationManager::timer_callback()
       mekf_->predict(control_input, 0.01);
 
       if (has_measurement) {
-        mekf_->correct(measurement);
-        if (measurement.odometry != nullptr) {
-          last_update_time_ = rclcpp::Time(measurement.odometry->header.stamp);
+        if (px4_odom_msg && enable_px4_odom_) {
+          mekf_->correct(*px4_odom_msg);
+          last_update_time_ = rclcpp::Time(px4_odom_msg->header.stamp);
+        } else if (openvins_odom_msg && enable_openvins_odom_) {
+          mekf_->correct(*openvins_odom_msg);
+          last_update_time_ = rclcpp::Time(openvins_odom_msg->header.stamp);
+        } else if (fast_lio_odom_msg && enable_fast_lio_odom_) {
+          mekf_->correct(*fast_lio_odom_msg);
+          last_update_time_ = rclcpp::Time(fast_lio_odom_msg->header.stamp);
         }
+      }
+      if (garmin_range_msg) {
+        // TODO: Update laser_uav_estimators to support Range messages.
+        // mekf_->correct(*garmin_range_msg);
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "Garmin correction skipped: MEKFEstimator lacks correct(Range) overload.");
       }
 
       rclcpp::Time stamp = this->get_clock()->now();

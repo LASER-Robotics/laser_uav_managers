@@ -27,7 +27,6 @@
 #include <nav_msgs/msg/odometry.hpp>
 
 #include <laser_msgs/msg/estimation_manager_diagnostics.hpp>
-#include <laser_msgs/msg/motor_speed_stamped.hpp>
 #include <laser_msgs/msg/sensor_status.hpp>
 #include <laser_msgs/msg/uav_control_diagnostics.hpp>
 #include <laser_msgs/srv/set_string.hpp>
@@ -42,10 +41,6 @@ using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
 
 namespace laser_uav_managers
 {
-/**
- * @brief Thread-safe temporal buffer for synchronizing asynchronous sensor messages
- * with state estimation predictions.
- */
 template <typename MsgT>
 struct SensorDataBuffer
 {
@@ -60,10 +55,6 @@ struct SensorDataBuffer
   typename MsgT::SharedPtr last_msg{nullptr};
 };
 
-/**
- * @brief Lifecycle node responsible for multi-sensor state estimation using a
- * Multiplicative Extended Kalman Filter (MEKF). Supports online odometry source switching.
- */
 class EstimationManager : public rclcpp_lifecycle::LifecycleNode
 {
 public:
@@ -74,26 +65,41 @@ public:
 private:
   /* CONFIG //{ */
   CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
+
   CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
+
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
+
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
+
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
   void get_parameters();
+
   void configure_pub_sub();
+
   void configure_timers();
+
   void configure_services();
   /*//}*/
 
   /* CALLBACKS //{ */
   void odometry_px4_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+
   void odometry_openvins_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+
   void odometry_fast_lio_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+
   void garmin_range_callback(const sensor_msgs::msg::Range::SharedPtr msg);
+
   void control_callback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg);
+
   void timer_callback();
+
   void check_subscribers_callback();
+
   void diagnostics_timer_callback();
+
   void set_odometry_callback(
     const std::shared_ptr<laser_msgs::srv::SetString::Request> request,
     std::shared_ptr<laser_msgs::srv::SetString::Response> response);
@@ -103,6 +109,7 @@ private:
 
   /* FUNCTIONS //{ */
   void setup_ekf();
+
   void publish_odometry(
     rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub,
     rclcpp::Time & pub_time);
@@ -110,7 +117,7 @@ private:
   template <typename MsgT>
   bool is_buffer_valid(
     SensorDataBuffer<MsgT> & sensor_buffer, const std::string & sensor_name,
-    const rclcpp::Time & reference_time, rclcpp::Logger logger, rclcpp::Clock::SharedPtr clock);
+    const rclcpp::Time & reference_time, rclcpp::Logger logger);
 
   void set_verbosity(const std::string & verbosity);
   /*//}*/
