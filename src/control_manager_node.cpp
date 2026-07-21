@@ -990,8 +990,8 @@ void ControlManagerNode::external_loop_timer_callback()
   if (diagnostics_.have_goal) {
     if (agile_planner_.isHover()) {
       if (
-        euclidean_distance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15 ||
-        check_heading_error() > 0.15) {
+        euclidean_distance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15 &&
+        check_heading_error() < 0.15) {
         if (stop_on_waypoints_) {
           if (desired_path_.empty()) {
             diagnostics_.have_goal = false;
