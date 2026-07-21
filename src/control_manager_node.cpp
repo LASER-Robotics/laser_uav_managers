@@ -451,6 +451,24 @@ double ControlManagerNode::normalize_heading(double heading)
 }
 //}
 
+/* heading_correction() //{ */
+double ControlManagerNode::heading_correction(double current_heading, double target_heading)
+{
+  constexpr double pi = 3.14159265358979323846;
+  constexpr double kP = 5.0;
+  constexpr double max_angular_velocity = 1.0;  // rad/s
+  constexpr double heading_tolerance = 0.01;    // rad
+
+  const double heading_error = std::remainder(target_heading - current_heading, 2.0 * pi);
+
+  if (std::abs(heading_error) <= heading_tolerance) {
+    return 0.0;
+  }
+
+  return max_angular_velocity * std::tanh((kP * heading_error) / max_angular_velocity);
+}
+//}
+
 /**
  * @brief Checks if the future NMPC trajectory horizon remains within the configured bounding box.
  * If safety constraints are violated, an emergency hover is triggered inside the safe zone.
@@ -879,13 +897,13 @@ void ControlManagerNode::external_loop_timer_callback()
   // Generate trajectory reference horizon and solve the NMPC optimization problem
   if (
     stop_on_waypoints_ && desired_path_.size() > 0 &&
-    (euclidean_distance(odometry_.pose.pose.position, desired_path_[0].position) < 0.1 &&
+    (euclidean_distance(odometry_.pose.pose.position, desired_path_[0].position) < 0.15 &&
      std::abs(
        quaternion_to_heading(last_waypoint_.pose.orientation) -
-       normalize_heading(desired_path_[0].heading)) < 0.1)) {
+       normalize_heading(desired_path_[0].heading)) < 0.15)) {
     if (
       euclidean_distance(odometry_.pose.pose.position, desired_path_[0].position) < 0.15 &&
-      check_heading_error() < 0.2) {
+      check_heading_error() < 0.15) {
       lock_waypoint_++;
     }
 
@@ -900,7 +918,7 @@ void ControlManagerNode::external_loop_timer_callback()
     }
 
     last_waypoint_.use_linear_velocity = false;
-    last_waypoint_.use_angular_velocity = false;
+    last_waypoint_.use_angular_velocity = true;
     last_waypoint_.use_individual_thrust = false;
 
     nmpc_solution_ = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
@@ -912,13 +930,22 @@ void ControlManagerNode::external_loop_timer_callback()
     if (safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       check_safe_area();
     }
-    last_waypoint_ = current_horizon_path_[0];
-    lock_waypoint_ = 0;
 
-    diagnostics_.reference_horizon = current_horizon_path_;
+    if (agile_planner_.isHover() && check_heading_error() > 0.15) {
+      for (auto i = 0; i < acados_params_.N + 1; i++) {
+        current_horizon_path_[i].twist.angular.z = heading_correction(
+          quaternion_to_heading(odometry_.pose.pose.orientation),
+          quaternion_to_heading(last_waypoint_.pose.orientation));
+      }
+      last_waypoint_.use_angular_velocity = true;
+    }
     nmpc_solution_ = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
+
+    diagnostics_.reference_horizon = current_horizon_path_;
+    last_waypoint_ = current_horizon_path_[0];
+    lock_waypoint_ = 0;
   }
   have_nmpc_solution_ = true;
 

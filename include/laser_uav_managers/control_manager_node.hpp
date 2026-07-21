@@ -85,6 +85,7 @@ private:
   double quaternion_to_heading(geometry_msgs::msg::Quaternion & q);
   void check_safe_area();
   bool estimate_mass();
+  double heading_correction(double current_heading, double target_heading);
 
   // Subscribers and callbacks
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;

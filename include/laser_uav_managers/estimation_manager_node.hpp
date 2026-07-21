@@ -22,11 +22,11 @@
 #include <tf2_ros/transform_listener.h>
 
 #include <sensor_msgs/msg/imu.hpp>
-#include <sensor_msgs/msg/range.hpp>
 
 #include <nav_msgs/msg/odometry.hpp>
 
 #include <laser_msgs/msg/estimation_manager_diagnostics.hpp>
+#include <laser_msgs/msg/motor_speed_stamped.hpp>
 #include <laser_msgs/msg/sensor_status.hpp>
 #include <laser_msgs/msg/uav_control_diagnostics.hpp>
 #include <laser_msgs/srv/set_string.hpp>
@@ -41,6 +41,10 @@ using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
 
 namespace laser_uav_managers
 {
+
+/**
+ * @brief Thread-safe buffer for incoming sensor messages with timeout validation.
+ */
 template <typename MsgT>
 struct SensorDataBuffer
 {
@@ -55,49 +59,37 @@ struct SensorDataBuffer
   typename MsgT::SharedPtr last_msg{nullptr};
 };
 
+/**
+ * @brief Lifecycle node managing Multi-EKF odometry estimation and sensor switching.
+ */
 class EstimationManager : public rclcpp_lifecycle::LifecycleNode
 {
 public:
   explicit EstimationManager(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
-
   ~EstimationManager() override;
 
 private:
   /* CONFIG //{ */
   CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
-
   CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
-
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
-
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
-
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
 
   void get_parameters();
-
-  void configure_pub_sub();
-
-  void configure_timers();
-
-  void configure_services();
+  void setup_pub_sub();
+  void setup_timers();
+  void setup_services();
   /*//}*/
 
   /* CALLBACKS //{ */
   void odometry_px4_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
-
-  void odometry_openvins_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
-
+  void odometry_open_vins_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
   void odometry_fast_lio_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
-
   void garmin_range_callback(const sensor_msgs::msg::Range::SharedPtr msg);
-
   void control_callback(const laser_msgs::msg::UavControlDiagnostics::SharedPtr msg);
-
   void timer_callback();
-
   void check_subscribers_callback();
-
   void diagnostics_timer_callback();
 
   void set_odometry_callback(
@@ -117,7 +109,7 @@ private:
   template <typename MsgT>
   bool is_buffer_valid(
     SensorDataBuffer<MsgT> & sensor_buffer, const std::string & sensor_name,
-    const rclcpp::Time & reference_time, rclcpp::Logger logger);
+    const rclcpp::Time & reference_time, rclcpp::Logger logger, rclcpp::Clock::SharedPtr clock);
 
   void set_verbosity(const std::string & verbosity);
   /*//}*/
@@ -136,6 +128,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_fast_lio_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Range>::SharedPtr garmin_sub_;
   rclcpp::Subscription<laser_msgs::msg::UavControlDiagnostics>::SharedPtr control_sub_;
+
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::TimerBase::SharedPtr check_subscribers_timer_;
   rclcpp::TimerBase::SharedPtr diagnostics_timer_;
@@ -221,6 +214,7 @@ private:
   double control_timeout_;
   /*//}*/
 };
+
 }  // namespace laser_uav_managers
 
 #endif  // LASER_UAV_MANAGERS__ESTIMATION_MANAGER_NODE_HPP_
