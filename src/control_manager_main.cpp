@@ -1,5 +1,6 @@
-#include <laser_uav_managers/control_manager_node.hpp>
 #include <rclcpp/rclcpp.hpp>
+
+#include <laser_uav_managers/control_manager_node.hpp>
 
 int main(int argc, char ** argv)
 {
