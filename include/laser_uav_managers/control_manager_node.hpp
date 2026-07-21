@@ -188,6 +188,8 @@ private:
   double land_increment_rampdown_;
   double land_start_rampdown_;
 
+  double trajectory_speed_;
+
   laser_uav_lib::RMSE estimated_rmse_;
 
   // Operational state flags
