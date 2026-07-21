@@ -649,10 +649,25 @@ void ControlManagerNode::trajectory_path_callback(const laser_msgs::msg::Traject
         count_not_deviation);
     }
 
-    agile_planner_.generateTrajectory(last_waypoint_, msg.waypoints, msg.speed);
     stop_on_waypoints_ = msg.stop_on_waypoints;
+    trajectory_speed_ = msg.speed;
     desired_path_ = msg.waypoints;
     emergency_hover_ = false;
+
+    if (desired_path_.empty()) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Trajectory will not executed, because it does not contain any waypoint.");
+      return;
+    }
+
+    if (stop_on_waypoints_) {
+      agile_planner_.generateTrajectory(
+        last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+    } else {
+      agile_planner_.generateTrajectory(last_waypoint_, desired_path_, trajectory_speed_);
+    }
+
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
@@ -876,6 +891,12 @@ void ControlManagerNode::external_loop_timer_callback()
 
     if (lock_waypoint_ > 300) {
       desired_path_.erase(desired_path_.begin());
+      lock_waypoint_ = 0;
+
+      if (!desired_path_.empty()) {
+        agile_planner_.generateTrajectory(
+          last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+      }
     }
 
     last_waypoint_.use_linear_velocity = false;
@@ -967,11 +988,19 @@ void ControlManagerNode::external_loop_timer_callback()
   }
 
   if (diagnostics_.have_goal) {
-    diagnostics_.have_goal =
-      (!(
-        agile_planner_.isHover() &&
-        euclidean_distance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15)) ||
-      (check_heading_error() > 0.15);
+    if (agile_planner_.isHover()) {
+      if (
+        euclidean_distance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15 &&
+        check_heading_error() < 0.15) {
+        if (stop_on_waypoints_) {
+          if (desired_path_.empty()) {
+            diagnostics_.have_goal = false;
+          }
+        } else {
+          diagnostics_.have_goal = false;
+        }
+      }
+    }
 
     if (!diagnostics_.have_goal) {
       calculate_rmse_ = true;
