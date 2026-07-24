@@ -21,7 +21,6 @@ find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
-find_package(px4_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(laser_uav_planners REQUIRED)
@@ -41,7 +40,6 @@ set(dependencies
     sensor_msgs
     nav_msgs
     std_srvs
-    px4_msgs
     tf2
     tf2_ros
     laser_msgs
