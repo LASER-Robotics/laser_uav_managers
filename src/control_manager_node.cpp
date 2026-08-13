@@ -1073,20 +1073,24 @@ void ControlManagerNode::external_loop_timer_callback()
 
   auto start_iteration = std::chrono::high_resolution_clock::now();
 
+  std::vector<double> Am_nmpc_array(15, 0.0);
+  std::vector<double> bm_nmpc_array(5, -100.0);
+  std::vector<double> tv_m_nmpc_array(5, 0.0);
+
   int drone_i = 0;
+
+
   for (const auto & uav : relative_velocity_position_neighbor_.array) {
     if (drone_i >= 5) {
       break;
     }
 
     Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x,
-      odometry_gps_.twist.twist.linear.y,
-      odometry_gps_.twist.twist.linear.z);
+      odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
 
     Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y,
       uav.pose.position.z);
-    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y,
-      uav.twist.linear.z);
+    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
 
     Eigen::Vector3d colision_center = relative_position / _time_window_;
     double r_safe = _r_colision_ / _time_window_;
@@ -1094,20 +1098,43 @@ void ControlManagerNode::external_loop_timer_callback()
     Eigen::Vector3d w_gps = relative_velocity - colision_center;
     double w_norm = w_gps.norm();
 
+    double bm = 0.0;
+    double tv_m = 0.0;
+
     if (w_norm < r_safe) {
       RCLCPP_WARN(this->get_logger(), "Imminent drone collision!");
       diagnostics_.collision = true;
       collision_loop = 0;
 
+      Eigen::Vector3d Am_gps = w_gps / w_norm;
+      Eigen::Vector3d u_gps = Am_gps * (r_safe - w_norm);
+
+      Eigen::Vector3d v_safe = velocity_gps + (0.5 * u_gps);
+
+      bm = Am_gps.dot(v_safe);
+
+      Am_nmpc_array[drone_i * 3 + 0] = Am_gps.x();
+      Am_nmpc_array[drone_i * 3 + 1] = Am_gps.y();
+      Am_nmpc_array[drone_i * 3 + 2] = Am_gps.z();
+      bm_nmpc_array[drone_i] = bm;
     } else {
       if (collision_loop >= 200) {
         diagnostics_.collision = false;
       }
     }
 
+    if (relative_velocity.squaredNorm() > 1e-6) {
+      tv_m = std::max(
+        relative_position.dot(
+          relative_velocity) / relative_velocity.squaredNorm(), 0.0);
+    }
+
+    tv_m_nmpc_array[drone_i] = tv_m;
+
     drone_i++;
   }
 
+  nmpc_controller_.setRVCConstraints(Am_nmpc_array, bm_nmpc_array, tv_m_nmpc_array);
   collision_loop++;
 
   // Handle landing thrust ramp-down after touchdown is detected
