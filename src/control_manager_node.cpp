@@ -20,85 +20,147 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
   declare_parameter("land.increment_rampdown", rclcpp::ParameterValue(0.05));
 
   declare_parameter(
-    "filter_params.butterworth.gyro_a", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+    "filter_params.butterworth.gyro_a",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter(
-    "filter_params.butterworth.gyro_b", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+    "filter_params.butterworth.gyro_b",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
 
   declare_parameter(
-    "filter_params.butterworth.motor_a", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+    "filter_params.butterworth.motor_a",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter(
-    "filter_params.butterworth.motor_b", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+    "filter_params.butterworth.motor_b",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
 
-  declare_parameter("agile_planner.multirotor_parameters.max_accel", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.multirotor_parameters.max_vel", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.multirotor_parameters.default_vel", rclcpp::ParameterValue(0.5));
-
-  declare_parameter("agile_planner.ltd_opt.use_drag", rclcpp::ParameterValue(false));
   declare_parameter(
-    "agile_planner.ltd_opt.thrust_decomp_acc_precision", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.ltd_opt.thrust_decomp_max_iter", rclcpp::ParameterValue(0));
-
-  declare_parameter("agile_planner.first_vel_opt.alpha", rclcpp::ParameterValue(0.0));
+    "agile_planner.multirotor_parameters.max_accel",
+    rclcpp::ParameterValue(0.0));
   declare_parameter(
-    "agile_planner.first_vel_opt.alpha_reduction_factor", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.first_vel_opt.alpha_min_threshold", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.first_vel_opt.max_iter", rclcpp::ParameterValue(0));
-
-  declare_parameter("agile_planner.second_vel_opt.run", rclcpp::ParameterValue(true));
-  declare_parameter("agile_planner.second_vel_opt.alpha", rclcpp::ParameterValue(0.0));
+    "agile_planner.multirotor_parameters.max_vel",
+    rclcpp::ParameterValue(0.0));
   declare_parameter(
-    "agile_planner.second_vel_opt.alpha_reduction_factor", rclcpp::ParameterValue(0.0));
-  declare_parameter(
-    "agile_planner.second_vel_opt.alpha_min_threshold", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.second_vel_opt.max_iter", rclcpp::ParameterValue(0));
+    "agile_planner.multirotor_parameters.default_vel",
+    rclcpp::ParameterValue(0.5));
 
-  declare_parameter("agile_planner.time.dt_precision", rclcpp::ParameterValue(0.0));
-  declare_parameter("agile_planner.time.sampling_step", rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.ltd_opt.use_drag",
+    rclcpp::ParameterValue(false));
+  declare_parameter(
+    "agile_planner.ltd_opt.thrust_decomp_acc_precision",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.ltd_opt.thrust_decomp_max_iter",
+    rclcpp::ParameterValue(0));
+
+  declare_parameter(
+    "agile_planner.first_vel_opt.alpha",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.first_vel_opt.alpha_reduction_factor",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.first_vel_opt.alpha_min_threshold",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.first_vel_opt.max_iter",
+    rclcpp::ParameterValue(0));
+
+  declare_parameter(
+    "agile_planner.second_vel_opt.run",
+    rclcpp::ParameterValue(true));
+  declare_parameter(
+    "agile_planner.second_vel_opt.alpha",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.second_vel_opt.alpha_reduction_factor",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.second_vel_opt.alpha_min_threshold",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.second_vel_opt.max_iter",
+    rclcpp::ParameterValue(0));
+
+  declare_parameter(
+    "agile_planner.time.dt_precision",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "agile_planner.time.sampling_step",
+    rclcpp::ParameterValue(0.0));
 
   declare_parameter("multirotor_parameters.mass", rclcpp::ParameterValue(0.0));
   declare_parameter(
-    "multirotor_parameters.inertia", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
-  declare_parameter("multirotor_parameters.motor_inertia", rclcpp::ParameterValue(0.0));
-  declare_parameter("multirotor_parameters.c_thrust", rclcpp::ParameterValue(0.0));
+    "multirotor_parameters.inertia",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+  declare_parameter(
+    "multirotor_parameters.motor_inertia",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "multirotor_parameters.c_thrust",
+    rclcpp::ParameterValue(0.0));
   declare_parameter("multirotor_parameters.c_tau", rclcpp::ParameterValue(0.0));
   declare_parameter(
-    "multirotor_parameters.omega_max", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
+    "multirotor_parameters.omega_max",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter(
-    "multirotor_parameters.drag", rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
-  declare_parameter("multirotor_parameters.n_motors", rclcpp::ParameterValue(0));
+    "multirotor_parameters.drag",
+    rclcpp::ParameterValue(std::vector<float_t>(3, 0.0)));
   declare_parameter(
-    "multirotor_parameters.G1", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
+    "multirotor_parameters.n_motors",
+    rclcpp::ParameterValue(0));
   declare_parameter(
-    "multirotor_parameters.G2", rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
-  declare_parameter("multirotor_parameters.quadratic_motor_model.a", rclcpp::ParameterValue(0.0));
-  declare_parameter("multirotor_parameters.quadratic_motor_model.b", rclcpp::ParameterValue(0.0));
-  declare_parameter("multirotor_parameters.thrust_min", rclcpp::ParameterValue(0.0));
-  declare_parameter("multirotor_parameters.thrust_max", rclcpp::ParameterValue(0.0));
-  declare_parameter("multirotor_parameters.total_thrust_max", rclcpp::ParameterValue(0.0));
+    "multirotor_parameters.G1",
+    rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
+  declare_parameter(
+    "multirotor_parameters.G2",
+    rclcpp::ParameterValue(std::vector<float_t>(32, 0.0)));
+  declare_parameter(
+    "multirotor_parameters.quadratic_motor_model.a",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "multirotor_parameters.quadratic_motor_model.b",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "multirotor_parameters.thrust_min",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "multirotor_parameters.thrust_max",
+    rclcpp::ParameterValue(0.0));
+  declare_parameter(
+    "multirotor_parameters.total_thrust_max",
+    rclcpp::ParameterValue(0.0));
 
   declare_parameter("drone_avoidance.time_window", rclcpp::ParameterValue(1.0));
   declare_parameter("drone_avoidance.r_colision", rclcpp::ParameterValue(3.0));
-  declare_parameter("drone_avoidance.r_local_neighbor", rclcpp::ParameterValue(10.0));
+  declare_parameter(
+    "drone_avoidance.r_local_neighbor",
+    rclcpp::ParameterValue(10.0));
 
   declare_parameter("nmpc_controller.nmpc_mode", rclcpp::ParameterValue(""));
   declare_parameter("nmpc_controller.N", rclcpp::ParameterValue(0));
   declare_parameter("nmpc_controller.dt", rclcpp::ParameterValue(0.0));
-  declare_parameter("nmpc_controller.Q", rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
+  declare_parameter(
+    "nmpc_controller.Q",
+    rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
   declare_parameter("nmpc_controller.R", rclcpp::ParameterValue(0.0));
 
   declare_parameter("safe_area.enabled", rclcpp::ParameterValue(false));
   declare_parameter(
-    "safe_area.constraints.x", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+    "safe_area.constraints.x",
+    rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
   declare_parameter(
-    "safe_area.constraints.y", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+    "safe_area.constraints.y",
+    rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
   declare_parameter(
-    "safe_area.constraints.z", rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
+    "safe_area.constraints.z",
+    rclcpp::ParameterValue(std::vector<float_t>(2, 0.0)));
 
-  odometry_                            = nav_msgs::msg::Odometry();
-  odometry_gps_                        = nav_msgs::msg::Odometry();
+  odometry_ = nav_msgs::msg::Odometry();
+  odometry_gps_ = nav_msgs::msg::Odometry();
   relative_velocity_position_neighbor_ = laser_msgs::msg::NeighborOdomArray();
-  diagnostics_                         = laser_msgs::msg::UavControlDiagnostics();
-  diagnostics_.is_fly                  = false;
+  diagnostics_ = laser_msgs::msg::UavControlDiagnostics();
+  diagnostics_.is_fly = false;
 
   last_angular_speed_ = Eigen::Vector3d::Zero();
   angular_acceleration_estimated_ = Eigen::Vector3d::Zero();
@@ -109,12 +171,12 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
 //}
 
 /* ~ControlManagerNode() //{ */
-ControlManagerNode::~ControlManagerNode()
-{}
+ControlManagerNode::~ControlManagerNode() {}
 //}
 
 /* on_configure() //{ */
-CallbackReturn ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
+CallbackReturn
+ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Configuring");
 
@@ -226,73 +288,114 @@ void ControlManagerNode::get_parameters()
   get_parameter("filter_params.butterworth.motor_b", aux);
   motor_b_ = aux.as_double_array();
 
-  get_parameter("agile_planner.multirotor_parameters.max_accel", pmm_params_.max_accel_norm);
-  get_parameter("agile_planner.multirotor_parameters.max_vel", pmm_params_.max_vel_norm);
-  get_parameter("agile_planner.multirotor_parameters.default_vel", pmm_params_.default_vel_norm);
+  get_parameter(
+    "agile_planner.multirotor_parameters.max_accel",
+    pmm_params_.max_accel_norm);
+  get_parameter(
+    "agile_planner.multirotor_parameters.max_vel",
+    pmm_params_.max_vel_norm);
+  get_parameter(
+    "agile_planner.multirotor_parameters.default_vel",
+    pmm_params_.default_vel_norm);
 
   get_parameter("agile_planner.ltd_opt.use_drag", pmm_params_.use_drag);
   get_parameter(
-    "agile_planner.ltd_opt.thrust_decomp_acc_precision", pmm_params_.thrust_decomp_acc_precision);
-  get_parameter("agile_planner.ltd_opt.thrust_decomp_max_iter", pmm_params_.thrust_decomp_max_iter);
+    "agile_planner.ltd_opt.thrust_decomp_acc_precision",
+    pmm_params_.thrust_decomp_acc_precision);
+  get_parameter(
+    "agile_planner.ltd_opt.thrust_decomp_max_iter",
+    pmm_params_.thrust_decomp_max_iter);
 
-  get_parameter("agile_planner.first_vel_opt.alpha", pmm_params_.first_run_alpha);
+  get_parameter(
+    "agile_planner.first_vel_opt.alpha",
+    pmm_params_.first_run_alpha);
   get_parameter(
     "agile_planner.first_vel_opt.alpha_reduction_factor",
     pmm_params_.first_run_alpha_reduction_factor);
   get_parameter(
-    "agile_planner.first_vel_opt.alpha_min_threshold", pmm_params_.first_run_alpha_min_threshold);
-  get_parameter("agile_planner.first_vel_opt.max_iter", pmm_params_.first_run_max_iter);
+    "agile_planner.first_vel_opt.alpha_min_threshold",
+    pmm_params_.first_run_alpha_min_threshold);
+  get_parameter(
+    "agile_planner.first_vel_opt.max_iter",
+    pmm_params_.first_run_max_iter);
 
   get_parameter("agile_planner.second_vel_opt.run", pmm_params_.run_second_opt);
-  get_parameter("agile_planner.second_vel_opt.alpha", pmm_params_.second_run_alpha);
+  get_parameter(
+    "agile_planner.second_vel_opt.alpha",
+    pmm_params_.second_run_alpha);
   get_parameter(
     "agile_planner.second_vel_opt.alpha_reduction_factor",
     pmm_params_.second_run_alpha_reduction_factor);
   get_parameter(
-    "agile_planner.second_vel_opt.alpha_min_threshold", pmm_params_.second_run_alpha_min_threshold);
-  get_parameter("agile_planner.second_vel_opt.max_iter", pmm_params_.second_run_max_iter);
+    "agile_planner.second_vel_opt.alpha_min_threshold",
+    pmm_params_.second_run_alpha_min_threshold);
+  get_parameter(
+    "agile_planner.second_vel_opt.max_iter",
+    pmm_params_.second_run_max_iter);
 
   get_parameter("agile_planner.time.dt_precision", pmm_params_.dt_precision);
   get_parameter("agile_planner.time.sampling_step", pmm_params_.sampling_step);
 
-  get_parameter("multirotor_parameters.mass", controller_multirotor_params_.mass);
+  get_parameter(
+    "multirotor_parameters.mass",
+    controller_multirotor_params_.mass);
   planner_multirotor_params_.mass = controller_multirotor_params_.mass;
 
   get_parameter("multirotor_parameters.inertia", aux);
-  controller_multirotor_params_.inertia_matrix = planner_multirotor_params_.inertia_matrix =
-    Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size())
-      .asDiagonal();
+  controller_multirotor_params_.inertia_matrix =
+    planner_multirotor_params_.inertia_matrix =
+    Eigen::Map<const Eigen::Vector3d>(
+    aux.as_double_array().data(),
+    aux.as_double_array().size())
+    .asDiagonal();
 
-  get_parameter("multirotor_parameters.c_thrust", controller_multirotor_params_.c_thrust);
+  get_parameter(
+    "multirotor_parameters.c_thrust",
+    controller_multirotor_params_.c_thrust);
 
   get_parameter("multirotor_parameters.drag", aux);
-  controller_multirotor_params_.drag =
-    Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size());
+  controller_multirotor_params_.drag = Eigen::Map<const Eigen::Vector3d>(
+    aux.as_double_array().data(), aux.as_double_array().size());
 
   get_parameter("multirotor_parameters.omega_max", aux);
-  controller_multirotor_params_.omega_max =
-    Eigen::Map<const Eigen::Vector3d>(aux.as_double_array().data(), aux.as_double_array().size());
+  controller_multirotor_params_.omega_max = Eigen::Map<const Eigen::Vector3d>(
+    aux.as_double_array().data(), aux.as_double_array().size());
 
-  get_parameter("multirotor_parameters.n_motors", controller_multirotor_params_.n_motors);
+  get_parameter(
+    "multirotor_parameters.n_motors",
+    controller_multirotor_params_.n_motors);
   get_parameter("multirotor_parameters.G1", aux);
   controller_multirotor_params_.G1 = planner_multirotor_params_.G1 =
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
-      aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+      Eigen::RowMajor>>(
+    aux.as_double_array().data(), 4,
+    controller_multirotor_params_.n_motors);
   get_parameter("multirotor_parameters.G2", aux);
   controller_multirotor_params_.G2 =
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
-      aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+      Eigen::RowMajor>>(
+    aux.as_double_array().data(), 4,
+    controller_multirotor_params_.n_motors);
 
-  get_parameter("multirotor_parameters.motor_inertia", controller_multirotor_params_.motor_inertia);
+  get_parameter(
+    "multirotor_parameters.motor_inertia",
+    controller_multirotor_params_.motor_inertia);
 
   get_parameter(
-    "multirotor_parameters.quadratic_motor_model.a", controller_multirotor_params_.motor_curve_a);
+    "multirotor_parameters.quadratic_motor_model.a",
+    controller_multirotor_params_.motor_curve_a);
   get_parameter(
-    "multirotor_parameters.quadratic_motor_model.b", controller_multirotor_params_.motor_curve_b);
-  get_parameter("multirotor_parameters.thrust_min", controller_multirotor_params_.thrust_min);
-  get_parameter("multirotor_parameters.thrust_max", controller_multirotor_params_.thrust_max);
+    "multirotor_parameters.quadratic_motor_model.b",
+    controller_multirotor_params_.motor_curve_b);
   get_parameter(
-    "multirotor_parameters.total_thrust_max", controller_multirotor_params_.total_thrust_max);
+    "multirotor_parameters.thrust_min",
+    controller_multirotor_params_.thrust_min);
+  get_parameter(
+    "multirotor_parameters.thrust_max",
+    controller_multirotor_params_.thrust_max);
+  get_parameter(
+    "multirotor_parameters.total_thrust_max",
+    controller_multirotor_params_.total_thrust_max);
 
   get_parameter("drone_avoidance.time_window", _time_window_);
   get_parameter("drone_avoidance.r_colision", _r_colision_);
@@ -321,8 +424,10 @@ void ControlManagerNode::get_parameters()
   safe_area_.z = aux.as_double_array();
 
   nmpc_solution_ = std::pair<Eigen::Vector3d, Eigen::VectorXd>(
-    Eigen::Vector3d::Zero(), Eigen::VectorXd(controller_multirotor_params_.n_motors));
-  motor_speed_estimated_ = Eigen::VectorXd(controller_multirotor_params_.n_motors);
+    Eigen::Vector3d::Zero(),
+    Eigen::VectorXd(controller_multirotor_params_.n_motors));
+  motor_speed_estimated_ =
+    Eigen::VectorXd(controller_multirotor_params_.n_motors);
 
   diagnostics_.estimated_mass = controller_multirotor_params_.mass;
 }
@@ -333,35 +438,64 @@ void ControlManagerNode::configure_pub_sub()
 {
   RCLCPP_INFO(get_logger(), "Configuring publishers and subscribers");
 
-  sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>("odometry_in", 1, std::bind(&ControlManagerNode::subOdometry, this, std::placeholders::_1));
-  sub_odometry_gps_ =
-      create_subscription<nav_msgs::msg::Odometry>("odometry_gps_in", 1, std::bind(&ControlManagerNode::subOdometryGps, this, std::placeholders::_1));
-  sub_relative_velocity_position_neighbor_ = create_subscription<laser_msgs::msg::NeighborOdomArray>(
-      "relative_velocity_position_neighbor_in", 1, std::bind(&ControlManagerNode::subRelativeVelocityPositionNeighbor, this, std::placeholders::_1));
-  sub_goto_ = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_in", 1, std::bind(&ControlManagerNode::subGoto, this, std::placeholders::_1));
-  sub_goto_relative_   = create_subscription<laser_msgs::msg::PoseWithHeading>("goto_relative_in", 1,
-                                                                             std::bind(&ControlManagerNode::subGotoRelative, this, std::placeholders::_1));
-  sub_api_diagnostics_ = create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
+  sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>(
+    "odometry_in", 1,
+    std::bind(
+      &ControlManagerNode::odometry_callback, this,
+      std::placeholders::_1));
+  sub_odometry_gps_ = create_subscription<nav_msgs::msg::Odometry>(
+    "odometry_gps_in", 1,
+    std::bind(
+      &ControlManagerNode::odometry_gps_callback, this,
+      std::placeholders::_1));
+  sub_relative_velocity_position_neighbor_ =
+    create_subscription<laser_msgs::msg::NeighborOdomArray>(
+    "relative_velocity_position_neighbor_in", 1,
+    std::bind(
+      &ControlManagerNode::relative_velocity_position_neighbor_callback,
+      this, std::placeholders::_1));
+  sub_goto_ = create_subscription<laser_msgs::msg::PoseWithHeading>(
+    "goto_in", 1,
+    std::bind(
+      &ControlManagerNode::goto_callback, this,
+      std::placeholders::_1));
+  sub_goto_relative_ = create_subscription<laser_msgs::msg::PoseWithHeading>(
+    "goto_relative_in", 1,
+    std::bind(
+      &ControlManagerNode::goto_relative_callback, this,
+      std::placeholders::_1));
+  sub_api_diagnostics_ =
+    create_subscription<laser_msgs::msg::ApiPx4Diagnostics>(
     "api_diagnostics_in", 1,
-    std::bind(&ControlManagerNode::api_diagnostics_callback, this, std::placeholders::_1));
+    std::bind(
+      &ControlManagerNode::api_diagnostics_callback, this,
+      std::placeholders::_1));
   sub_trajectory_path_ = create_subscription<laser_msgs::msg::TrajectoryPath>(
     "trajectory_path_in", 1,
-    std::bind(&ControlManagerNode::trajectory_path_callback, this, std::placeholders::_1));
+    std::bind(
+      &ControlManagerNode::trajectory_path_callback, this,
+      std::placeholders::_1));
 
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_ =
-      create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
+      create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>(
+      "attitude_rates_thrust_out", 10);
   } else {
     sub_imu_ = create_subscription<sensor_msgs::msg::Imu>(
-      "imu_in", 1, std::bind(&ControlManagerNode::imu_callback, this, std::placeholders::_1));
+      "imu_in", 1,
+      std::bind(
+        &ControlManagerNode::imu_callback, this,
+        std::placeholders::_1));
     sub_motor_speed_ = create_subscription<laser_msgs::msg::MotorSpeedStamped>(
       "motor_speed_estimation_in", 1,
-      std::bind(&ControlManagerNode::motor_speed_callback, this, std::placeholders::_1));
-    pub_motor_speed_reference_ =
-      create_publisher<laser_msgs::msg::MotorSpeed>("motor_speed_reference_out", 10);
+      std::bind(
+        &ControlManagerNode::motor_speed_callback, this,
+        std::placeholders::_1));
+    pub_motor_speed_reference_ = create_publisher<laser_msgs::msg::MotorSpeed>(
+      "motor_speed_reference_out", 10);
   }
-  pub_diagnostics_ =
-    create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
+  pub_diagnostics_ = create_publisher<laser_msgs::msg::UavControlDiagnostics>(
+    "diagnostics_out", 10);
 }
 //}
 
@@ -372,16 +506,19 @@ void ControlManagerNode::configure_timers()
 
   tmr_external_loop_control_ = create_wall_timer(
     std::chrono::duration<double>(1.0 / rate_external_loop_control_),
-    std::bind(&ControlManagerNode::external_loop_timer_callback, this), nullptr);
+    std::bind(&ControlManagerNode::external_loop_timer_callback, this),
+    nullptr);
   if (!angular_rates_and_thrust_mode_) {
     tmr_internal_loop_control_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / rate_internal_loop_control_),
-      std::bind(&ControlManagerNode::internal_loop_timer_callback, this), nullptr);
+      std::bind(&ControlManagerNode::internal_loop_timer_callback, this),
+      nullptr);
   }
 
   tmr_diagnostics_ = create_wall_timer(
     std::chrono::duration<double>(1.0 / rate_diagnostics_),
-    std::bind(&ControlManagerNode::diagnostics_timer_callback, this), nullptr);
+    std::bind(&ControlManagerNode::diagnostics_timer_callback, this),
+    nullptr);
 }
 //}
 
@@ -392,12 +529,12 @@ void ControlManagerNode::configure_services()
 
   srv_takeoff_ = create_service<std_srvs::srv::Trigger>(
     "takeoff", std::bind(
-                 &ControlManagerNode::takeoff_service_callback, this, std::placeholders::_1,
-                 std::placeholders::_2));
+      &ControlManagerNode::takeoff_service_callback, this,
+      std::placeholders::_1, std::placeholders::_2));
   srv_land_ = create_service<std_srvs::srv::Trigger>(
     "land", std::bind(
-              &ControlManagerNode::land_service_callback, this, std::placeholders::_1,
-              std::placeholders::_2));
+      &ControlManagerNode::land_service_callback, this,
+      std::placeholders::_1, std::placeholders::_2));
 }
 //}
 
@@ -406,10 +543,10 @@ void ControlManagerNode::configure_classes()
 {
   RCLCPP_INFO(get_logger(), "Configuring internal helper classes");
 
-  agile_planner_ =
-    laser_uav_planners::AgilePlanner(planner_multirotor_params_, pmm_params_, acados_params_.dt);
-  nmpc_controller_ =
-    laser_uav_controllers::NmpcController(controller_multirotor_params_, acados_params_);
+  agile_planner_ = laser_uav_planners::AgilePlanner(
+    planner_multirotor_params_, pmm_params_, acados_params_.dt);
+  nmpc_controller_ = laser_uav_controllers::NmpcController(
+    controller_multirotor_params_, acados_params_);
   if (!angular_rates_and_thrust_mode_) {
     btw_gyro_x_ = laser_uav_lib::IIRFilter(gyro_a_, gyro_b_);
     btw_gyro_y_ = laser_uav_lib::IIRFilter(gyro_a_, gyro_b_);
@@ -419,7 +556,8 @@ void ControlManagerNode::configure_classes()
       btw_motors_.push_back(laser_uav_lib::IIRFilter(motor_a_, motor_b_));
     }
 
-    indi_controller_ = laser_uav_controllers::IndiController(controller_multirotor_params_);
+    indi_controller_ =
+      laser_uav_controllers::IndiController(controller_multirotor_params_);
   }
 }
 //}
@@ -435,14 +573,18 @@ double ControlManagerNode::check_heading_error()
 
 /* euclidean_distance() //{ */
 double ControlManagerNode::euclidean_distance(
-  geometry_msgs::msg::Point p1, geometry_msgs::msg::Point p2)
+  geometry_msgs::msg::Point p1,
+  geometry_msgs::msg::Point p2)
 {
-  return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2) + std::pow(p1.z - p2.z, 2));
+  return std::sqrt(
+    std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2) +
+    std::pow(p1.z - p2.z, 2));
 }
 //}
 
 /* quaternion_to_heading() //{ */
-double ControlManagerNode::quaternion_to_heading(geometry_msgs::msg::Quaternion & q)
+double
+ControlManagerNode::quaternion_to_heading(geometry_msgs::msg::Quaternion & q)
 {
   Eigen::Quaterniond q_eigen(q.w, q.x, q.y, q.z);
   q_eigen.normalize();
@@ -463,26 +605,31 @@ double ControlManagerNode::normalize_heading(double heading)
 //}
 
 /* heading_correction() //{ */
-double ControlManagerNode::heading_correction(double current_heading, double target_heading)
+double ControlManagerNode::heading_correction(
+  double current_heading,
+  double target_heading)
 {
   constexpr double pi = 3.14159265358979323846;
   constexpr double kP = 5.0;
-  constexpr double max_angular_velocity = 1.0;  // rad/s
-  constexpr double heading_tolerance = 0.01;    // rad
+  constexpr double max_angular_velocity = 1.0; // rad/s
+  constexpr double heading_tolerance = 0.01;   // rad
 
-  const double heading_error = std::remainder(target_heading - current_heading, 2.0 * pi);
+  const double heading_error =
+    std::remainder(target_heading - current_heading, 2.0 * pi);
 
   if (std::abs(heading_error) <= heading_tolerance) {
     return 0.0;
   }
 
-  return max_angular_velocity * std::tanh((kP * heading_error) / max_angular_velocity);
+  return max_angular_velocity *
+         std::tanh((kP * heading_error) / max_angular_velocity);
 }
 //}
 
 /**
- * @brief Checks if the future NMPC trajectory horizon remains within the configured bounding box.
- * If safety constraints are violated, an emergency hover is triggered inside the safe zone.
+ * @brief Checks if the future NMPC trajectory horizon remains within the
+ * configured bounding box. If safety constraints are violated, an emergency
+ * hover is triggered inside the safe zone.
  */
 /* check_safe_area() //{ */
 void ControlManagerNode::check_safe_area()
@@ -525,8 +672,10 @@ void ControlManagerNode::check_safe_area()
   if (!path_is_ok) {
     RCLCPP_WARN(
       this->get_logger(),
-      "Trajectory will not be executed because the next trajectory points are outside the safe "
-      "area. Entering emergency hover. Please submit a valid point within the safe area.");
+      "Trajectory will not be executed because the next trajectory "
+      "points are outside the safe "
+      "area. Entering emergency hover. Please submit a valid point "
+      "within the safe area.");
     RCLCPP_WARN(
       this->get_logger(),
       "\nSafe Area Constraints:\n"
@@ -538,11 +687,16 @@ void ControlManagerNode::check_safe_area()
       "     |                                 |\n"
       "     |                                 |\n"
       "(-%.1f, %.1f) --------------------- (-%.1f, -%.1f)",
-      safe_area_.x[1], safe_area_.y[1], safe_area_.x[1], safe_area_.y[0], safe_area_.z[0],
-      safe_area_.z[1], safe_area_.x[0], safe_area_.y[1], safe_area_.x[0], safe_area_.y[0]);
+      safe_area_.x[1], safe_area_.y[1], safe_area_.x[1],
+      safe_area_.y[0], safe_area_.z[0], safe_area_.z[1],
+      safe_area_.x[0], safe_area_.y[1], safe_area_.x[0],
+      safe_area_.y[0]);
 
-    emergency_hover_reference.heading = quaternion_to_heading(odometry_.pose.pose.orientation);
-    agile_planner_.generateTrajectory(last_waypoint_, emergency_hover_reference, 0.0, false);
+    emergency_hover_reference.heading =
+      quaternion_to_heading(odometry_.pose.pose.orientation);
+    agile_planner_.generateTrajectory(
+      last_waypoint_, emergency_hover_reference,
+      0.0, false);
     emergency_hover_ = true;
   }
 }
@@ -564,23 +718,29 @@ bool ControlManagerNode::estimate_mass()
     return false;
   }
 
-  if (rclcpp::Duration(this->get_clock()->now() - mass_estimation_time_start_).seconds() < 3.0) {
+  if (rclcpp::Duration(this->get_clock()->now() - mass_estimation_time_start_)
+    .seconds() < 3.0)
+  {
     return false;
   }
 
-  estimated_mass_ =
-    (0.98 * estimated_mass_for_detect_landing_) + ((1 - 0.98) * controller_multirotor_params_.mass);
+  estimated_mass_ = (0.98 * estimated_mass_for_detect_landing_) +
+    ((1 - 0.98) * controller_multirotor_params_.mass);
   diagnostics_.estimated_mass = estimated_mass_;
   nmpc_controller_.setMass(estimated_mass_);
   agile_planner_.setMass(estimated_mass_);
-  RCLCPP_INFO(this->get_logger(), "Estimated Calibrated Mass: %.2f", estimated_mass_);
+  RCLCPP_INFO(
+    this->get_logger(), "Estimated Calibrated Mass: %.2f",
+    estimated_mass_);
 
   return true;
 }
 //}
 
-/* subRelativeVelocityPositionNeighbor() //{ */
-void ControlManagerNode::subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg) {
+/* relative_velocity_position_neighbor() //{ */
+void ControlManagerNode::relative_velocity_position_neighbor_callback(
+  const laser_msgs::msg::NeighborOdomArray & msg)
+{
   if (!is_active_) {
     return;
   }
@@ -589,8 +749,10 @@ void ControlManagerNode::subRelativeVelocityPositionNeighbor(const laser_msgs::m
 }
 //}
 
-/* subOdometryGps() //{ */
-void ControlManagerNode::subOdometryGps(const nav_msgs::msg::Odometry &msg) {
+/* odometry_gps_callback() //{ */
+void ControlManagerNode::odometry_gps_callback(
+  const nav_msgs::msg::Odometry & msg)
+{
   if (!is_active_) {
     return;
   }
@@ -607,8 +769,10 @@ void ControlManagerNode::odometry_callback(const nav_msgs::msg::Odometry & msg)
   }
 
   odometry_ = msg;
-  diagnostics_.current_norm_speed = sqrt(
-    pow(odometry_.twist.twist.linear.x, 2) + pow(odometry_.twist.twist.linear.y, 2) +
+  diagnostics_.current_norm_speed =
+    sqrt(
+    pow(odometry_.twist.twist.linear.x, 2) +
+    pow(odometry_.twist.twist.linear.y, 2) +
     pow(odometry_.twist.twist.linear.z, 2));
   received_first_odometry_msg_ = true;
 }
@@ -627,17 +791,23 @@ void ControlManagerNode::imu_callback(const sensor_msgs::msg::Imu & msg)
 
   Eigen::Vector3d current;
   current << btw_gyro_x_.iterate(msg.angular_velocity.x),
-    btw_gyro_y_.iterate(msg.angular_velocity.y), btw_gyro_z_.iterate(msg.angular_velocity.z);
+    btw_gyro_y_.iterate(msg.angular_velocity.y),
+    btw_gyro_z_.iterate(msg.angular_velocity.z);
 
-  angular_acceleration_estimated_(0) = (current(0) - last_angular_speed_(0)) / 0.004;
-  angular_acceleration_estimated_(1) = (current(1) - last_angular_speed_(1)) / 0.004;
-  angular_acceleration_estimated_(2) = (current(2) - last_angular_speed_(2)) / 0.004;
+  angular_acceleration_estimated_(0) =
+    (current(0) - last_angular_speed_(0)) / 0.004;
+  angular_acceleration_estimated_(1) =
+    (current(1) - last_angular_speed_(1)) / 0.004;
+  angular_acceleration_estimated_(2) =
+    (current(2) - last_angular_speed_(2)) / 0.004;
 
   last_angular_speed_ = current;
 }
 //}
 
 /* motor_speed_callback() //{ */
+void ControlManagerNode::motor_speed_callback(
+  const laser_msgs::msg::MotorSpeedStamped & msg)
 {
   if (!is_active_) {
     return;
@@ -650,7 +820,8 @@ void ControlManagerNode::imu_callback(const sensor_msgs::msg::Imu & msg)
 //}
 
 /* api_diagnostics_callback() //{ */
-void ControlManagerNode::api_diagnostics_callback(const laser_msgs::msg::ApiPx4Diagnostics & msg)
+void ControlManagerNode::api_diagnostics_callback(
+  const laser_msgs::msg::ApiPx4Diagnostics & msg)
 {
   if (!is_active_) {
     return;
@@ -663,7 +834,8 @@ void ControlManagerNode::api_diagnostics_callback(const laser_msgs::msg::ApiPx4D
 //}
 
 /* trajectory_path_callback() //{ */
-void ControlManagerNode::trajectory_path_callback(const laser_msgs::msg::TrajectoryPath & msg)
+void ControlManagerNode::trajectory_path_callback(
+  const laser_msgs::msg::TrajectoryPath & msg)
 {
   if (!is_active_) {
     return;
@@ -677,7 +849,10 @@ void ControlManagerNode::trajectory_path_callback(const laser_msgs::msg::Traject
         break;
       }
 
-      if (euclidean_distance(odometry_.pose.pose.position, msg.waypoints[i].position) < 0.1) {
+      if (euclidean_distance(
+          odometry_.pose.pose.position,
+          msg.waypoints[i].position) < 0.1)
+      {
         count_not_deviation++;
       } else {
         valid_deviation = true;
@@ -687,12 +862,14 @@ void ControlManagerNode::trajectory_path_callback(const laser_msgs::msg::Traject
     if (count_not_deviation == msg.waypoints.size()) {
       RCLCPP_WARN(
         this->get_logger(),
-        "Trajectory will not executed, because dont have any point with deviation more bigger than "
+        "Trajectory will not executed, because dont have any point "
+        "with deviation more bigger than "
         "0.1m.");
     } else if (count_not_deviation > 0) {
       RCLCPP_WARN(
         this->get_logger(),
-        "Points with deviation smaller tan 0.1 filtered and removed from the trajectory called. "
+        "Points with deviation smaller tan 0.1 filtered and removed "
+        "from the trajectory called. "
         "Quantity Points: %d",
         count_not_deviation);
     }
@@ -704,28 +881,34 @@ void ControlManagerNode::trajectory_path_callback(const laser_msgs::msg::Traject
 
     if (desired_path_.empty()) {
       RCLCPP_WARN(
-        this->get_logger(),
-        "Trajectory will not executed, because it does not contain any waypoint.");
+        this->get_logger(), "Trajectory will not executed, because "
+        "it does not contain any waypoint.");
       return;
     }
 
     if (stop_on_waypoints_) {
       agile_planner_.generateTrajectory(
-        last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+        last_waypoint_, desired_path_.front(),
+        trajectory_speed_, true);
     } else {
-      agile_planner_.generateTrajectory(last_waypoint_, desired_path_, trajectory_speed_);
+      agile_planner_.generateTrajectory(
+        last_waypoint_, desired_path_,
+        trajectory_speed_);
     }
 
     RCLCPP_INFO(this->get_logger(), "Trajectory Received!");
     diagnostics_.have_goal = true;
   } else {
-    RCLCPP_WARN(this->get_logger(), "Trajectory will not executed, because the uav is not flying.");
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Trajectory will not executed, because the uav is not flying.");
   }
 }
 //}
 
 /* goto_callback() //{ */
-void ControlManagerNode::goto_callback(const laser_msgs::msg::PoseWithHeading & msg)
+void ControlManagerNode::goto_callback(
+  const laser_msgs::msg::PoseWithHeading & msg)
 {
   if (!is_active_) {
     return;
@@ -734,8 +917,8 @@ void ControlManagerNode::goto_callback(const laser_msgs::msg::PoseWithHeading & 
   if (!requested_takeoff_ && !requested_land_ && takeoff_done_) {
     if (euclidean_distance(odometry_.pose.pose.position, msg.position) < 0.1) {
       RCLCPP_WARN(
-        this->get_logger(),
-        "GOTO's Point will not executed, because the uav alerady is at this point.");
+        this->get_logger(), "GOTO's Point will not executed, because "
+        "the uav alerady is at this point.");
     } else {
       agile_planner_.generateTrajectory(last_waypoint_, msg, 0.0, false);
       stop_on_waypoints_ = false;
@@ -745,13 +928,15 @@ void ControlManagerNode::goto_callback(const laser_msgs::msg::PoseWithHeading & 
     }
   } else {
     RCLCPP_WARN(
-      this->get_logger(), "GOTO's Point will not executed, because the uav is not flying.");
+      this->get_logger(),
+      "GOTO's Point will not executed, because the uav is not flying.");
   }
 }
 //}
 
 /* goto_relative_callback() //{ */
-void ControlManagerNode::goto_relative_callback(const laser_msgs::msg::PoseWithHeading & msg)
+void ControlManagerNode::goto_relative_callback(
+  const laser_msgs::msg::PoseWithHeading & msg)
 {
   if (!is_active_) {
     return;
@@ -771,7 +956,8 @@ void ControlManagerNode::goto_relative_callback(const laser_msgs::msg::PoseWithH
     world_point.position.x = last_waypoint_.pose.position.x + aux(0);
     world_point.position.y = last_waypoint_.pose.position.y + aux(1);
     world_point.position.z = last_waypoint_.pose.position.z + aux(2);
-    world_point.heading = quaternion_to_heading(last_waypoint_.pose.orientation) + msg.heading;
+    world_point.heading =
+      quaternion_to_heading(last_waypoint_.pose.orientation) + msg.heading;
 
     agile_planner_.generateTrajectory(last_waypoint_, world_point, 0.0, false);
     stop_on_waypoints_ = false;
@@ -780,16 +966,18 @@ void ControlManagerNode::goto_relative_callback(const laser_msgs::msg::PoseWithH
     diagnostics_.have_goal = true;
   } else {
     RCLCPP_WARN(
-      this->get_logger(),
-      "GOTO's Relative Point will not executed, because the uav is not flying.");
+      this->get_logger(), "GOTO's Relative Point will not executed, "
+      "because the uav is not flying.");
   }
 }
 //}
 
 /* takeoff_service_callback() //{ */
 void ControlManagerNode::takeoff_service_callback(
-  [[maybe_unused]] const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-  [[maybe_unused]] std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+  [[maybe_unused]] const std::shared_ptr<std_srvs::srv::Trigger::Request>
+  request,
+  [[maybe_unused]] std::shared_ptr<std_srvs::srv::Trigger::Response>
+  response)
 {
   if (!is_active_) {
     return;
@@ -799,7 +987,8 @@ void ControlManagerNode::takeoff_service_callback(
     response->success = false;
     response->message = "takeoff requested failed, odometry msg not received";
     RCLCPP_ERROR(
-      this->get_logger(), "Takeoff requested failed, because the odometry msg not received!");
+      this->get_logger(),
+      "Takeoff requested failed, because the odometry msg not received!");
     return;
   }
 
@@ -815,9 +1004,12 @@ void ControlManagerNode::takeoff_service_callback(
     laser_msgs::msg::PoseWithHeading takeoff_waypoint;
     takeoff_waypoint.position = odometry_.pose.pose.position;
     takeoff_waypoint.position.z = takeoff_height_;
-    takeoff_waypoint.heading = quaternion_to_heading(odometry_.pose.pose.orientation);
+    takeoff_waypoint.heading =
+      quaternion_to_heading(odometry_.pose.pose.orientation);
 
-    agile_planner_.generateTrajectory(last_waypoint_, takeoff_waypoint, takeoff_speed_, true);
+    agile_planner_.generateTrajectory(
+      last_waypoint_, takeoff_waypoint,
+      takeoff_speed_, true);
 
     land_done_ = false;
     diagnostics_.have_goal = true;
@@ -828,8 +1020,10 @@ void ControlManagerNode::takeoff_service_callback(
 
 /* land_service_callback() //{ */
 void ControlManagerNode::land_service_callback(
-  [[maybe_unused]] const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-  [[maybe_unused]] std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+  [[maybe_unused]] const std::shared_ptr<std_srvs::srv::Trigger::Request>
+  request,
+  [[maybe_unused]] std::shared_ptr<std_srvs::srv::Trigger::Response>
+  response)
 {
   if (!is_active_) {
     return;
@@ -847,9 +1041,12 @@ void ControlManagerNode::land_service_callback(
     laser_msgs::msg::PoseWithHeading land_waypoint;
     land_waypoint.position = odometry_.pose.pose.position;
     land_waypoint.position.z = -1.0;
-    land_waypoint.heading = quaternion_to_heading(odometry_.pose.pose.orientation);
+    land_waypoint.heading =
+      quaternion_to_heading(odometry_.pose.pose.orientation);
 
-    agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, land_speed_, true);
+    agile_planner_.generateTrajectory(
+      last_waypoint_, land_waypoint,
+      land_speed_, true);
 
     takeoff_done_ = false;
     diagnostics_.have_goal = true;
@@ -859,8 +1056,9 @@ void ControlManagerNode::land_service_callback(
 
 /**
  * @brief High-level NMPC external control loop.
- * Solves the Optimal Control Problem (OCP) for the current horizon, manages touchdown detection,
- * executes landing thrust ramp-down, and publishes attitude/thrust setpoints.
+ * Solves the Optimal Control Problem (OCP) for the current horizon, manages
+ * touchdown detection, executes landing thrust ramp-down, and publishes
+ * attitude/thrust setpoints.
  */
 /* external_loop_timer_callback() //{ */
 void ControlManagerNode::external_loop_timer_callback()
@@ -876,26 +1074,30 @@ void ControlManagerNode::external_loop_timer_callback()
   auto start_iteration = std::chrono::high_resolution_clock::now();
 
   int drone_i = 0;
-  for (const auto &uav : relative_velocity_position_neighbor_.array) {
+  for (const auto & uav : relative_velocity_position_neighbor_.array) {
     if (drone_i >= 5) {
       break;
     }
 
-    Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x, odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
+    Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x,
+      odometry_gps_.twist.twist.linear.y,
+      odometry_gps_.twist.twist.linear.z);
 
-    Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y, uav.pose.position.z);
-    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
+    Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y,
+      uav.pose.position.z);
+    Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y,
+      uav.twist.linear.z);
 
     Eigen::Vector3d colision_center = relative_position / _time_window_;
-    double          r_safe          = _r_colision_ / _time_window_;
+    double r_safe = _r_colision_ / _time_window_;
 
-    Eigen::Vector3d w_gps  = relative_velocity - colision_center;
-    double          w_norm = w_gps.norm();
+    Eigen::Vector3d w_gps = relative_velocity - colision_center;
+    double w_norm = w_gps.norm();
 
     if (w_norm < r_safe) {
       RCLCPP_WARN(this->get_logger(), "Imminent drone collision!");
       diagnostics_.collision = true;
-      collision_loop         = 0;
+      collision_loop = 0;
 
     } else {
       if (collision_loop >= 200) {
@@ -910,7 +1112,9 @@ void ControlManagerNode::external_loop_timer_callback()
 
   // Handle landing thrust ramp-down after touchdown is detected
   if (land_rampdown_) {
-    RCLCPP_INFO(this->get_logger(), "Land Ramp Down: %.2f", land_start_rampdown_);
+    RCLCPP_INFO(
+      this->get_logger(), "Land Ramp Down: %.2f",
+      land_start_rampdown_);
 
     if (angular_rates_and_thrust_mode_) {
       laser_msgs::msg::AttitudeRatesAndThrust msg;
@@ -925,7 +1129,8 @@ void ControlManagerNode::external_loop_timer_callback()
       for (auto i = 0; i < nmpc_solution_.second.size(); i++) {
         msg.data.push_back(land_start_rampdown_);
       }
-      diagnostics_.last_control_input.data = nmpc_controller_.getLastIndividualThrust();
+      diagnostics_.last_control_input.data =
+        nmpc_controller_.getLastIndividualThrust();
       pub_motor_speed_reference_->publish(msg);
     }
 
@@ -933,8 +1138,8 @@ void ControlManagerNode::external_loop_timer_callback()
     diagnostics_.last_control_input.data = std::vector(
       controller_multirotor_params_.n_motors,
       laser_uav_controllers::throtleToThrust(
-        controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
-        land_start_rampdown_));
+        controller_multirotor_params_.motor_curve_a,
+        controller_multirotor_params_.motor_curve_b, land_start_rampdown_));
 
     if (land_start_rampdown_ == 0.0) {
       land_rampdown_ = false;
@@ -950,23 +1155,28 @@ void ControlManagerNode::external_loop_timer_callback()
 
     diagnostics_.control_iteration_duration_ms =
       std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - start_iteration)
-        .count();
+      std::chrono::high_resolution_clock::now() - start_iteration)
+      .count();
     return;
   } else {
     diagnostics_.current_control_rampdown = NAN;
   }
 
-  // Generate trajectory reference horizon and solve the NMPC optimization problem
-  if (
-    stop_on_waypoints_ && desired_path_.size() > 0 &&
-    (euclidean_distance(odometry_.pose.pose.position, desired_path_[0].position) < 0.15 &&
-     std::abs(
-       quaternion_to_heading(last_waypoint_.pose.orientation) -
-       normalize_heading(desired_path_[0].heading)) < 0.15)) {
-    if (
-      euclidean_distance(odometry_.pose.pose.position, desired_path_[0].position) < 0.15 &&
-      check_heading_error() < 0.15) {
+  // Generate trajectory reference horizon and solve the NMPC optimization
+  // problem
+  if (stop_on_waypoints_ && desired_path_.size() > 0 &&
+    (euclidean_distance(
+      odometry_.pose.pose.position,
+      desired_path_[0].position) < 0.15 &&
+    std::abs(
+      quaternion_to_heading(last_waypoint_.pose.orientation) -
+      normalize_heading(desired_path_[0].heading)) < 0.15))
+  {
+    if (euclidean_distance(
+        odometry_.pose.pose.position,
+        desired_path_[0].position) < 0.15 &&
+      check_heading_error() < 0.15)
+    {
       lock_waypoint_++;
     }
 
@@ -976,7 +1186,8 @@ void ControlManagerNode::external_loop_timer_callback()
 
       if (!desired_path_.empty()) {
         agile_planner_.generateTrajectory(
-          last_waypoint_, desired_path_.front(), trajectory_speed_, true);
+          last_waypoint_, desired_path_.front(),
+          trajectory_speed_, true);
       }
     }
 
@@ -988,8 +1199,8 @@ void ControlManagerNode::external_loop_timer_callback()
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
   } else {
-    current_horizon_path_ =
-      agile_planner_.getTrajectory(acados_params_.N + 1, this->get_clock()->now().seconds());
+    current_horizon_path_ = agile_planner_.getTrajectory(
+      acados_params_.N + 1, this->get_clock()->now().seconds());
     if (safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       check_safe_area();
     }
@@ -1002,7 +1213,8 @@ void ControlManagerNode::external_loop_timer_callback()
       }
       last_waypoint_.use_angular_velocity = true;
     }
-    nmpc_solution_ = nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
+    nmpc_solution_ =
+      nmpc_controller_.getCorrection(current_horizon_path_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
 
@@ -1020,20 +1232,24 @@ void ControlManagerNode::external_loop_timer_callback()
     diagnostics_.metrics.std = NAN;
   }
 
-  // Publish attitude rate and thrust setpoints if configured in this control mode
+  // Publish attitude rate and thrust setpoints if configured in this control
+  // mode
   if (angular_rates_and_thrust_mode_) {
-    estimated_mass_for_detect_landing_ = (1 / GRAVITY) * nmpc_solution_.second.sum();
+    estimated_mass_for_detect_landing_ =
+      (1 / GRAVITY) * nmpc_solution_.second.sum();
 
     laser_msgs::msg::AttitudeRatesAndThrust msg;
     msg.total_thrust_normalized = laser_uav_controllers::thrustToThrotle(
-      controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
+      controller_multirotor_params_.motor_curve_a,
+      controller_multirotor_params_.motor_curve_b,
       nmpc_solution_.second.sum() / controller_multirotor_params_.n_motors);
     msg.roll_rate = nmpc_solution_.first(0);
     msg.pitch_rate = nmpc_solution_.first(1);
     msg.yaw_rate = nmpc_solution_.first(2);
 
     diagnostics_.last_control_input.unit_of_measurement = "N";
-    diagnostics_.last_control_input.data = nmpc_controller_.getLastIndividualThrust();
+    diagnostics_.last_control_input.data =
+      nmpc_controller_.getLastIndividualThrust();
     pub_attitude_rates_and_thrust_reference_->publish(msg);
   }
 
@@ -1053,35 +1269,45 @@ void ControlManagerNode::external_loop_timer_callback()
   if (requested_land_) {
     RCLCPP_INFO_THROTTLE(
       this->get_logger(), *this->get_clock(), 2500,
-      "Current estimated mass for detect landing: %.3f", estimated_mass_for_detect_landing_);
-    if (estimated_mass_for_detect_landing_ <= estimated_mass_ * land_threshold_detect_) {
+      "Current estimated mass for detect landing: %.3f",
+      estimated_mass_for_detect_landing_);
+    if (estimated_mass_for_detect_landing_ <=
+      estimated_mass_ * land_threshold_detect_)
+    {
       requested_land_ = false;
       land_done_ = true;
       diagnostics_.have_goal = false;
       diagnostics_.is_fly = false;
       land_rampdown_ = true;
       land_start_rampdown_ = laser_uav_controllers::thrustToThrotle(
-        controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
+        controller_multirotor_params_.motor_curve_a,
+        controller_multirotor_params_.motor_curve_b,
         (estimated_mass_ * GRAVITY) / controller_multirotor_params_.n_motors);
       RCLCPP_INFO(
-        this->get_logger(), "Landing Done!, Detected land with estimated mass: %.3f",
+        this->get_logger(),
+        "Landing Done!, Detected land with estimated mass: %.3f",
         estimated_mass_for_detect_landing_);
       RCLCPP_INFO(this->get_logger(), "Start Land Ramp Down!");
     } else if (agile_planner_.isHover()) {
       laser_msgs::msg::PoseWithHeading land_waypoint;
       land_waypoint.position = odometry_.pose.pose.position;
-      land_waypoint.heading = quaternion_to_heading(odometry_.pose.pose.orientation);
+      land_waypoint.heading =
+        quaternion_to_heading(odometry_.pose.pose.orientation);
       land_waypoint.position.z += -1.0;
 
-      agile_planner_.generateTrajectory(last_waypoint_, land_waypoint, land_speed_, true);
+      agile_planner_.generateTrajectory(
+        last_waypoint_, land_waypoint,
+        land_speed_, true);
     }
   }
 
   if (diagnostics_.have_goal) {
     if (agile_planner_.isHover()) {
-      if (
-        euclidean_distance(odometry_.pose.pose.position, last_waypoint_.pose.position) < 0.15 &&
-        check_heading_error() < 0.15) {
+      if (euclidean_distance(
+          odometry_.pose.pose.position,
+          last_waypoint_.pose.position) < 0.15 &&
+        check_heading_error() < 0.15)
+      {
         if (stop_on_waypoints_) {
           if (desired_path_.empty()) {
             diagnostics_.have_goal = false;
@@ -1099,15 +1325,16 @@ void ControlManagerNode::external_loop_timer_callback()
 
   diagnostics_.control_iteration_duration_ms =
     std::chrono::duration<double, std::milli>(
-      std::chrono::high_resolution_clock::now() - start_iteration)
-      .count();
+    std::chrono::high_resolution_clock::now() - start_iteration)
+    .count();
 }
 //}
 
 /**
  * @brief Fast INDI internal loop.
- * Computes incremental motor speed corrections based on angular acceleration errors and publishes
- * individual rotor speed commands when direct motor speed control is enabled.
+ * Computes incremental motor speed corrections based on angular acceleration
+ * errors and publishes individual rotor speed commands when direct motor speed
+ * control is enabled.
  */
 /* internal_loop_timer_callback() //{ */
 void ControlManagerNode::internal_loop_timer_callback()
@@ -1126,21 +1353,23 @@ void ControlManagerNode::internal_loop_timer_callback()
 
   if (have_nmpc_solution_) {
     Eigen::VectorXd indi_thrust = indi_controller_.getCorrection(
-      angular_acceleration_estimated_, motor_speed_estimated_, nmpc_solution_.second,
-      nmpc_solution_.first);
+      angular_acceleration_estimated_, motor_speed_estimated_,
+      nmpc_solution_.second, nmpc_solution_.first);
 
     estimated_mass_for_detect_landing_ = (1 / GRAVITY) * indi_thrust.sum();
 
     diagnostics_.last_control_input.unit_of_measurement = "N";
-    diagnostics_.last_control_input.data =
-      std::vector<double>(indi_thrust.data(), indi_thrust.data() + indi_thrust.size());
+    diagnostics_.last_control_input.data = std::vector<double>(
+      indi_thrust.data(), indi_thrust.data() + indi_thrust.size());
 
     laser_msgs::msg::MotorSpeed msg;
     for (auto i = 0; i < indi_thrust.size(); i++) {
-      msg.data.push_back(laser_uav_controllers::thrustToThrotle(
-        controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
-        indi_thrust(i), controller_multirotor_params_.thrust_max,
-        controller_multirotor_params_.thrust_min));
+      msg.data.push_back(
+        laser_uav_controllers::thrustToThrotle(
+          controller_multirotor_params_.motor_curve_a,
+          controller_multirotor_params_.motor_curve_b, indi_thrust(i),
+          controller_multirotor_params_.thrust_max,
+          controller_multirotor_params_.thrust_min));
     }
 
     pub_motor_speed_reference_->publish(msg);
@@ -1167,7 +1396,7 @@ void ControlManagerNode::diagnostics_timer_callback()
   pub_diagnostics_->publish(diagnostics_);
 }
 //}
-}  // namespace laser_uav_managers
+} // namespace laser_uav_managers
 
 #include <rclcpp_components/register_node_macro.hpp>
 RCLCPP_COMPONENTS_REGISTER_NODE(laser_uav_managers::ControlManagerNode)

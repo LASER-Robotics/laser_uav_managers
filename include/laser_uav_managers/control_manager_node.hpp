@@ -22,9 +22,9 @@
 #include <laser_msgs/msg/api_px4_diagnostics.hpp>
 #include <laser_msgs/msg/attitude_rates_and_thrust.hpp>
 #include <laser_msgs/msg/motor_speed.hpp>
-#include <laser_msgs/msg/neighbor_odom_array.hpp>
-#include <laser_msgs/msg/neighbor_odom.hpp>
 #include <laser_msgs/msg/motor_speed_stamped.hpp>
+#include <laser_msgs/msg/neighbor_odom.hpp>
+#include <laser_msgs/msg/neighbor_odom_array.hpp>
 #include <laser_msgs/msg/pose_with_heading.hpp>
 #include <laser_msgs/msg/reference_state.hpp>
 #include <laser_msgs/msg/trajectory_path.hpp>
@@ -36,16 +36,15 @@
 #include <laser_uav_lib/metrics/rmse.hpp>
 #include <laser_uav_planners/agile_planner.hpp>
 
-using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+using CallbackReturn =
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-namespace laser_uav_managers
-{
+namespace laser_uav_managers {
 
 /**
  * @brief Represents 3D bounding box constraints for safe UAV operation.
  */
-struct SafeArea
-{
+struct SafeArea {
   bool enabled;
   std::vector<double> x;
   std::vector<double> y;
@@ -53,23 +52,24 @@ struct SafeArea
 };
 
 /**
- * @brief Lifecycle node responsible for UAV trajectory tracking and cascade flight control.
- * It manages an outer Non-linear Model Predictive Controller (NMPC) and an optional
- * inner Incremental Nonlinear Dynamic Inversion (INDI) controller.
+ * @brief Lifecycle node responsible for UAV trajectory tracking and cascade
+ * flight control. It manages an outer Non-linear Model Predictive Controller
+ * (NMPC) and an optional inner Incremental Nonlinear Dynamic Inversion (INDI)
+ * controller.
  */
-class ControlManagerNode : public rclcpp_lifecycle::LifecycleNode
-{
+class ControlManagerNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-  explicit ControlManagerNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  explicit ControlManagerNode(
+      const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
   ~ControlManagerNode() override;
 
 private:
   // Lifecycle transitions
-  CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
-  CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
-  CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
-  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
-  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
+  CallbackReturn on_configure(const rclcpp_lifecycle::State &state) override;
+  CallbackReturn on_activate(const rclcpp_lifecycle::State &state) override;
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State &state) override;
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State &state) override;
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State &state) override;
 
   rclcpp::CallbackGroup::SharedPtr callback_group_;
 
@@ -81,78 +81,88 @@ private:
   void configure_classes();
 
   // Mathematical and safety utility functions
-  double euclidean_distance(geometry_msgs::msg::Point p1, geometry_msgs::msg::Point p2);
+  double euclidean_distance(geometry_msgs::msg::Point p1,
+                            geometry_msgs::msg::Point p2);
   double check_heading_error();
   double normalize_heading(double heading);
-  double quaternion_to_heading(geometry_msgs::msg::Quaternion & q);
+  double quaternion_to_heading(geometry_msgs::msg::Quaternion &q);
   void check_safe_area();
   bool estimate_mass();
   double heading_correction(double current_heading, double target_heading);
 
   // Subscribers and callbacks
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
-  void odometry_callback(const nav_msgs::msg::Odometry & msg);
+  void odometry_callback(const nav_msgs::msg::Odometry &msg);
 
-  rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_gps_;
-  void                                                          subOdometryGps(const nav_msgs::msg::Odometry &msg);
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr
+      sub_odometry_gps_;
+  void odometry_gps_callback(const nav_msgs::msg::Odometry &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::NeighborOdomArray>::ConstSharedPtr sub_relative_velocity_position_neighbor_;
-  void                                                                     subRelativeVelocityPositionNeighbor(const laser_msgs::msg::NeighborOdomArray &msg);
+  rclcpp::Subscription<laser_msgs::msg::NeighborOdomArray>::ConstSharedPtr
+      sub_relative_velocity_position_neighbor_;
+  void relative_velocity_position_neighbor_callback(
+      const laser_msgs::msg::NeighborOdomArray &msg);
 
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr sub_imu_;
-  void imu_callback(const sensor_msgs::msg::Imu & msg);
+  void imu_callback(const sensor_msgs::msg::Imu &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::ConstSharedPtr sub_motor_speed_;
-  void motor_speed_callback(const laser_msgs::msg::MotorSpeedStamped & msg);
+  rclcpp::Subscription<laser_msgs::msg::MotorSpeedStamped>::ConstSharedPtr
+      sub_motor_speed_;
+  void motor_speed_callback(const laser_msgs::msg::MotorSpeedStamped &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_;
-  void goto_callback(const laser_msgs::msg::PoseWithHeading & msg);
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr
+      sub_goto_;
+  void goto_callback(const laser_msgs::msg::PoseWithHeading &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr sub_goto_relative_;
-  void goto_relative_callback(const laser_msgs::msg::PoseWithHeading & msg);
+  rclcpp::Subscription<laser_msgs::msg::PoseWithHeading>::ConstSharedPtr
+      sub_goto_relative_;
+  void goto_relative_callback(const laser_msgs::msg::PoseWithHeading &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr sub_trajectory_path_;
-  void trajectory_path_callback(const laser_msgs::msg::TrajectoryPath & msg);
+  rclcpp::Subscription<laser_msgs::msg::TrajectoryPath>::ConstSharedPtr
+      sub_trajectory_path_;
+  void trajectory_path_callback(const laser_msgs::msg::TrajectoryPath &msg);
 
-  rclcpp::Subscription<laser_msgs::msg::ApiPx4Diagnostics>::ConstSharedPtr sub_api_diagnostics_;
-  void api_diagnostics_callback(const laser_msgs::msg::ApiPx4Diagnostics & msg);
+  rclcpp::Subscription<laser_msgs::msg::ApiPx4Diagnostics>::ConstSharedPtr
+      sub_api_diagnostics_;
+  void api_diagnostics_callback(const laser_msgs::msg::ApiPx4Diagnostics &msg);
 
   // Services
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_takeoff_;
   void takeoff_service_callback(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+      const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_land_;
   void land_service_callback(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+      const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
   // Publishers and timers
-  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::AttitudeRatesAndThrust>::SharedPtr
-    pub_attitude_rates_and_thrust_reference_;
+  rclcpp_lifecycle::LifecyclePublisher<
+      laser_msgs::msg::AttitudeRatesAndThrust>::SharedPtr
+      pub_attitude_rates_and_thrust_reference_;
   double rate_external_loop_control_;
   rclcpp::TimerBase::SharedPtr tmr_external_loop_control_;
   void external_loop_timer_callback();
 
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::MotorSpeed>::SharedPtr
-    pub_motor_speed_reference_;
+      pub_motor_speed_reference_;
   double rate_internal_loop_control_;
   rclcpp::TimerBase::SharedPtr tmr_internal_loop_control_;
   void internal_loop_timer_callback();
 
-  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::UavControlDiagnostics>::SharedPtr
-    pub_diagnostics_;
+  rclcpp_lifecycle::LifecyclePublisher<
+      laser_msgs::msg::UavControlDiagnostics>::SharedPtr pub_diagnostics_;
   double rate_diagnostics_;
   rclcpp::TimerBase::SharedPtr tmr_diagnostics_;
   void diagnostics_timer_callback();
 
   // State variables
-  laser_msgs::msg::UavControlDiagnostics        diagnostics_;
-  nav_msgs::msg::Odometry                       odometry_;
-  nav_msgs::msg::Odometry                       odometry_gps_;
-  laser_msgs::msg::NeighborOdomArray            relative_velocity_position_neighbor_;
-  laser_msgs::msg::ReferenceState               last_waypoint_;
+  laser_msgs::msg::UavControlDiagnostics diagnostics_;
+  nav_msgs::msg::Odometry odometry_;
+  nav_msgs::msg::Odometry odometry_gps_;
+  laser_msgs::msg::NeighborOdomArray relative_velocity_position_neighbor_;
+  laser_msgs::msg::ReferenceState last_waypoint_;
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
 
@@ -189,7 +199,6 @@ private:
   double estimated_mass_;
   double estimated_mass_for_detect_landing_;
 
-
   double _time_window_;
   double _r_colision_;
 
@@ -202,7 +211,7 @@ private:
   double land_threshold_detect_;
   double land_increment_rampdown_;
   double land_start_rampdown_;
-  int    collision_loop{0};
+  int collision_loop{0};
 
   double trajectory_speed_;
 
@@ -224,6 +233,6 @@ private:
   bool land_rampdown_{false};
   bool is_active_{false};
 };
-}  // namespace laser_uav_managers
+} // namespace laser_uav_managers
 
-#endif  // LASER_UAV_MANAGERS__CONTROL_MANAGER_NODE_HPP_
+#endif // LASER_UAV_MANAGERS__CONTROL_MANAGER_NODE_HPP_
