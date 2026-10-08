@@ -1,14 +1,14 @@
-/**/**:
+/**:
   ros__parameters:
     multirotor_parameters:
       # Quadrotor Mass
-      mass: 1.75 # Kg
+      mass: 2.40 # Kg
 
-     # Diagonal of Inertia Matrix
-      inertia: [0.02771, 0.02771, 0.05469]
+      # Diagonal of Inertia Matrix
+      inertia: [0.01879, 0.02234, 0.03382]
 
       # Thrust constant {Ct}
-      c_thrust: 5.68e-6  # This constant is the thrust coefficient
+      c_thrust: 7.852747e-6 # This constant is the thrust coefficient
 
       # Drag in x, y and z
       drag: [0.0, 0.0, 0.0] # For now we dont use this
@@ -17,29 +17,26 @@
       n_motors: 4
 
       # Effectiveness Matrix
-      G1: [  1.0,     1.0,    1.0,     1.0,
-      -0.125,   0.125,  0.125,  -0.125,
-      -0.11,    0.11,  -0.11,    0.11,
-      -0.016,  -0.016,  0.016,   0.016 ]
+      G1: [  1.0,         1.0,         1.0,         1.0,
+            -0.1059,      0.1062,      0.1062,     -0.1059,
+            -0.1081,      0.1040,     -0.1081,      0.1040,
+            -0.0128,   -0.0128,     0.0128,     0.0128 ]
 
       # Motor inertia gain matrix
-      G2: [   0.0,      0.0,     0.0,      0.0,
-      0.0,      0.0,     0.0,      0.0,
-      0.0,      0.0,     0.0,      0.0,
-      -1.5e-5,  -1.5e-5,  1.5e-5,   1.5e-5 ]
+      G2: [   0.0,       0.0,        0.0,        0.0,
+              0.0,       0.0,        0.0,        0.0,
+              0.0,       0.0,        0.0,        0.0,
+             -1.5e-5,   -1.5e-5,     1.5e-5,     1.5e-5 ]
 
       # This is used to model the thrust x throtle curve for normalize input to the px4
       quadratic_motor_model:
-        a: 0.243975
-        b: -0.232754
+        a: 0.257592
+        b: -0.134246
 
       # Thrust Constraints
       thrust_min: 0.0 # N
-      thrust_max: 20.6 # N
-      total_thrust_max: 61.0 # N
+      thrust_max: 16.0 # N
+      total_thrust_max: 64.0 # N
 
       # Omega Constraints
-      omega_max: [15.0, 15.0, 4.0]
-
-
-
+      omega_max: [10.0, 10.0, 4.0]
