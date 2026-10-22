@@ -77,6 +77,12 @@ def generate_launch_description():
             description='Whether use the simulation time.'))
 
     # Initialize arguments
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'reference_source', default_value='agile_planner',
+            choices=['agile_planner', 'external'],
+            description='NMPC reference source after takeoff.'))
+
     nmpc_controller_file = LaunchConfiguration('nmpc_controller_file')
     agile_planner_file = LaunchConfiguration('agile_planner_file')
     uav_parameters_file = LaunchConfiguration('uav_parameters_file')
@@ -89,9 +95,11 @@ def generate_launch_description():
         namespace=uav_name,
         output='screen',
         parameters=[control_manager_file, uav_parameters_file, agile_planner_file,
-                    nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
+                    nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time'),
+                                          'reference.source': LaunchConfiguration('reference_source')}],
         remappings=[
-            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            # ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
+            ('/' + uav_name + '/odometry_in', '/' + uav_name + '/ground_truth'),
             ('/' + uav_name + '/odometry_gps_in', '/' + uav_name + '/ground_truth'),
             ('/' + uav_name + '/relative_velocity_position_neighbor_in', '/' + uav_name + '/neighbor_velocity_position'),
             ('/' + uav_name + '/motor_speed_estimation_in',

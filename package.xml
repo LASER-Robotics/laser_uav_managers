@@ -17,6 +17,7 @@
   <depend>nav_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>laser_msgs</depend>
+  <depend>laser_uav_multi_drones</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>geometry_msgs</depend>
@@ -27,6 +28,7 @@
   <depend>laser_uav_estimators</depend>
 
   <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
   <export>

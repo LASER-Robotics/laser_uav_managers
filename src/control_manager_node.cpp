@@ -140,6 +140,11 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
   declare_parameter("nmpc_controller.nmpc_mode", rclcpp::ParameterValue(""));
   declare_parameter("nmpc_controller.N", rclcpp::ParameterValue(0));
   declare_parameter("nmpc_controller.dt", rclcpp::ParameterValue(0.0));
+  rcl_interfaces::msg::ParameterDescriptor reference_descriptor;
+  reference_descriptor.read_only = true;
+  declare_parameter("reference.source", rclcpp::ParameterValue("agile_planner"), reference_descriptor);
+  declare_parameter("reference.maximum_age", 0.2, reference_descriptor);
+  declare_parameter("reference.future_tolerance", 0.02, reference_descriptor);
   declare_parameter(
     "nmpc_controller.Q",
     rclcpp::ParameterValue(std::vector<float_t>(6, 0.0)));
@@ -181,6 +186,19 @@ ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
   RCLCPP_INFO(get_logger(), "Configuring");
 
   get_parameters();
+  if (reference_source_ != "agile_planner" && reference_source_ != "external") {
+    RCLCPP_ERROR(get_logger(), "reference.source must be agile_planner or external");
+    return CallbackReturn::FAILURE;
+  }
+  try {
+    reference_horizon_buffer_ = std::make_unique<ReferenceHorizonBuffer>(
+      acados_params_.N, acados_params_.dt, reference_maximum_age_,
+      reference_future_tolerance_);
+    reference_horizon_selector_ = std::make_unique<ReferenceHorizonSelector>(acados_params_.N);
+  } catch (const std::invalid_argument & error) {
+    RCLCPP_ERROR(get_logger(), "Invalid external reference configuration: %s", error.what());
+    return CallbackReturn::FAILURE;
+  }
   configure_pub_sub();
   configure_timers();
   configure_services();
@@ -195,6 +213,11 @@ CallbackReturn ControlManagerNode::on_activate(
   [[maybe_unused]] const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Activating");
+  have_nmpc_solution_ = false;
+  reference_horizon_buffer_->clear();
+  reference_horizon_selector_->reset();
+  active_reference_source_ = ReferenceHorizonSelector::Source::Planner;
+  received_first_odometry_msg_ = false;
 
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_->on_activate();
@@ -213,6 +236,7 @@ CallbackReturn ControlManagerNode::on_deactivate(
   [[maybe_unused]] const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Deactivating");
+  have_nmpc_solution_ = false;
 
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_->on_deactivate();
@@ -222,6 +246,10 @@ CallbackReturn ControlManagerNode::on_deactivate(
   pub_diagnostics_->on_deactivate();
 
   is_active_ = false;
+  reference_horizon_buffer_->clear();
+  reference_horizon_selector_->reset();
+  active_reference_source_ = ReferenceHorizonSelector::Source::Planner;
+  received_first_odometry_msg_ = false;
   return CallbackReturn::SUCCESS;
 }
 //}
@@ -248,6 +276,11 @@ CallbackReturn ControlManagerNode::on_cleanup(
   sub_goto_relative_.reset();
   sub_api_diagnostics_.reset();
   sub_trajectory_path_.reset();
+  sub_reference_horizon_.reset();
+  srv_get_reference_horizon_.reset();
+  reference_horizon_buffer_.reset();
+  reference_horizon_selector_.reset();
+  received_first_odometry_msg_ = false;
 
   return CallbackReturn::SUCCESS;
 }
@@ -258,6 +291,13 @@ CallbackReturn ControlManagerNode::on_shutdown(
   [[maybe_unused]] const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Shutting down");
+  is_active_ = false;
+  if (reference_horizon_buffer_) {
+    reference_horizon_buffer_->clear();
+  }
+  if (reference_horizon_selector_) {
+    reference_horizon_selector_->reset();
+  }
   return CallbackReturn::SUCCESS;
 }
 //}
@@ -409,6 +449,9 @@ void ControlManagerNode::get_parameters()
 
   get_parameter("nmpc_controller.N", acados_params_.N);
   get_parameter("nmpc_controller.dt", acados_params_.dt);
+  get_parameter("reference.source", reference_source_);
+  get_parameter("reference.maximum_age", reference_maximum_age_);
+  get_parameter("reference.future_tolerance", reference_future_tolerance_);
 
   get_parameter("nmpc_controller.Q", aux);
   acados_params_.Q = aux.as_double_array();
@@ -437,6 +480,11 @@ void ControlManagerNode::get_parameters()
 void ControlManagerNode::configure_pub_sub()
 {
   RCLCPP_INFO(get_logger(), "Configuring publishers and subscribers");
+
+  sub_reference_horizon_ = create_subscription<ReferenceHorizonBuffer::Horizon>(
+    "~/reference_horizon", rclcpp::QoS(1).reliable(),
+    std::bind(&ControlManagerNode::reference_horizon_callback, this,
+      std::placeholders::_1));
 
   sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>(
     "odometry_in", 1,
@@ -526,6 +574,12 @@ void ControlManagerNode::configure_timers()
 void ControlManagerNode::configure_services()
 {
   RCLCPP_INFO(get_logger(), "Configuring services");
+
+  srv_get_reference_horizon_ =
+    create_service<laser_uav_multi_drones::srv::GetReferenceHorizon>(
+    "~/get_reference_horizon",
+    std::bind(&ControlManagerNode::get_reference_horizon_service_callback, this,
+      std::placeholders::_1, std::placeholders::_2));
 
   srv_takeoff_ = create_service<std_srvs::srv::Trigger>(
     "takeoff", std::bind(
@@ -626,6 +680,38 @@ double ControlManagerNode::heading_correction(
 }
 //}
 
+laser_msgs::msg::ReferenceState ControlManagerNode::external_hover_candidate()
+{
+  laser_msgs::msg::ReferenceState reference;
+  reference.use_position = true;
+  reference.use_linear_velocity = true;
+  reference.use_orientation = true;
+  reference.use_angular_velocity = true;
+  reference.pose.position = odometry_.pose.pose.position;
+  const double heading = quaternion_to_heading(odometry_.pose.pose.orientation);
+  reference.pose.orientation.w = std::cos(heading / 2.);
+  reference.pose.orientation.z = std::sin(heading / 2.);
+  return reference;
+}
+
+bool ControlManagerNode::external_reference_has_goal()
+{
+  for (auto & reference : current_horizon_path_) {
+    const auto & v = reference.twist.linear;
+    const auto & w = reference.twist.angular;
+    if (euclidean_distance(odometry_.pose.pose.position, reference.pose.position) >= 0.15 ||
+      std::hypot(std::hypot(v.x, v.y), v.z) > 0.02 ||
+      (reference.use_angular_velocity && std::hypot(std::hypot(w.x, w.y), w.z) > 0.02) ||
+      (reference.use_orientation && std::abs(normalize_heading(
+        quaternion_to_heading(reference.pose.orientation) -
+        quaternion_to_heading(odometry_.pose.pose.orientation))) >= 0.15))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * @brief Checks if the future NMPC trajectory horizon remains within the
  * configured bounding box. If safety constraints are violated, an emergency
@@ -638,34 +724,36 @@ void ControlManagerNode::check_safe_area()
   laser_msgs::msg::PoseWithHeading emergency_hover_reference;
   emergency_hover_reference.position = odometry_.pose.pose.position;
 
-  if (current_horizon_path_[0].pose.position.x < safe_area_.x[0]) {
-    emergency_hover_reference.position.x = safe_area_.x[0] + 0.05;
-    path_is_ok = false;
-  } else if (current_horizon_path_[0].pose.position.x > safe_area_.x[1]) {
-    emergency_hover_reference.position.x = safe_area_.x[1] - 0.05;
-    path_is_ok = false;
-  }
-
-  if (current_horizon_path_[0].pose.position.y < safe_area_.y[0]) {
-    emergency_hover_reference.position.y = safe_area_.y[0];
-    path_is_ok = false;
-  } else if (current_horizon_path_[0].pose.position.y > safe_area_.y[1]) {
-    emergency_hover_reference.position.y = safe_area_.y[1] - 0.05;
-    path_is_ok = false;
-  }
-
-  if (requested_takeoff_ || requested_land_) {
-    if (current_horizon_path_[0].pose.position.z > safe_area_.z[1]) {
-      emergency_hover_reference.position.z = safe_area_.z[1] - 0.05;
+  for (const auto & reference : current_horizon_path_) {
+    if (reference.pose.position.x < safe_area_.x[0]) {
+      emergency_hover_reference.position.x = safe_area_.x[0] + 0.05;
+      path_is_ok = false;
+    } else if (reference.pose.position.x > safe_area_.x[1]) {
+      emergency_hover_reference.position.x = safe_area_.x[1] - 0.05;
       path_is_ok = false;
     }
-  } else {
-    if (current_horizon_path_[0].pose.position.z < safe_area_.z[0]) {
-      emergency_hover_reference.position.z = safe_area_.z[0] + 0.05;
+
+    if (reference.pose.position.y < safe_area_.y[0]) {
+      emergency_hover_reference.position.y = safe_area_.y[0];
       path_is_ok = false;
-    } else if (current_horizon_path_[0].pose.position.z > safe_area_.z[1]) {
-      emergency_hover_reference.position.z = safe_area_.z[1] - 0.05;
+    } else if (reference.pose.position.y > safe_area_.y[1]) {
+      emergency_hover_reference.position.y = safe_area_.y[1] - 0.05;
       path_is_ok = false;
+    }
+
+    if (requested_takeoff_ || requested_land_) {
+      if (reference.pose.position.z > safe_area_.z[1]) {
+        emergency_hover_reference.position.z = safe_area_.z[1] - 0.05;
+        path_is_ok = false;
+      }
+    } else {
+      if (reference.pose.position.z < safe_area_.z[0]) {
+        emergency_hover_reference.position.z = safe_area_.z[0] + 0.05;
+        path_is_ok = false;
+      } else if (reference.pose.position.z > safe_area_.z[1]) {
+        emergency_hover_reference.position.z = safe_area_.z[1] - 0.05;
+        path_is_ok = false;
+      }
     }
   }
 
@@ -760,6 +848,50 @@ void ControlManagerNode::odometry_gps_callback(
   odometry_gps_ = msg;
 }
 //}
+
+void ControlManagerNode::reference_horizon_callback(
+  const ReferenceHorizonBuffer::Horizon & msg)
+{
+  if (!is_active_ || !reference_horizon_buffer_) {
+    return;
+  }
+  std::string reason;
+  if (!received_first_odometry_msg_) {
+    reason = "Waiting for odometry before accepting an external reference horizon";
+  } else if (reference_horizon_buffer_->store(msg, odometry_.header.frame_id,
+      now(), ReferenceHorizonBuffer::Clock::now(), reason))
+  {
+    return;
+  }
+  RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+    "Rejected external reference horizon: %s", reason.c_str());
+}
+
+ReferenceHorizonBuffer::Horizon::ConstSharedPtr
+ControlManagerNode::get_valid_reference_horizon(std::string & reason) const
+{
+  if (!is_active_ || !reference_horizon_buffer_) {
+    reason = "ControlManager is not active";
+    return nullptr;
+  }
+  if (!received_first_odometry_msg_) {
+    reason = "Waiting for odometry before accepting an external reference horizon";
+    return nullptr;
+  }
+  return reference_horizon_buffer_->getFresh(odometry_.header.frame_id,
+    now(), ReferenceHorizonBuffer::Clock::now(), reason);
+}
+
+void ControlManagerNode::get_reference_horizon_service_callback(
+  const std::shared_ptr<laser_uav_multi_drones::srv::GetReferenceHorizon::Request>,
+  std::shared_ptr<laser_uav_multi_drones::srv::GetReferenceHorizon::Response> response)
+{
+  const auto horizon = get_valid_reference_horizon(response->message);
+  response->valid = static_cast<bool>(horizon);
+  if (horizon) {
+    response->horizon = *horizon;
+  }
+}
 
 /* odometry_callback() //{ */
 void ControlManagerNode::odometry_callback(const nav_msgs::msg::Odometry & msg)
@@ -1067,7 +1199,7 @@ void ControlManagerNode::external_loop_timer_callback()
     return;
   }
 
-  if (lock_control_inputs_) {
+  if (lock_control_inputs_ || !received_first_odometry_msg_) {
     return;
   }
 
@@ -1162,9 +1294,16 @@ void ControlManagerNode::external_loop_timer_callback()
     diagnostics_.current_control_rampdown = NAN;
   }
 
-  // Generate trajectory reference horizon and solve the NMPC optimization
-  // problem
-  if (stop_on_waypoints_ && desired_path_.size() > 0 &&
+  std::string reference_reason;
+  const auto fresh_horizon = get_valid_reference_horizon(reference_reason);
+  auto selection = reference_horizon_selector_->select(reference_source_ == "external",
+    {takeoff_done_, diagnostics_.is_fly, requested_takeoff_, requested_land_, emergency_hover_},
+    fresh_horizon, external_hover_candidate(), odometry_.header.frame_id);
+  bool external_control = selection.source != ReferenceHorizonSelector::Source::Planner;
+
+  // Procedure references take precedence over mission waypoints and PPO.
+  if (!external_control && !requested_takeoff_ && !requested_land_ && !emergency_hover_ &&
+    stop_on_waypoints_ && desired_path_.size() > 0 &&
     (euclidean_distance(
       odometry_.pose.pose.position,
       desired_path_[0].position) < 0.15 &&
@@ -1194,18 +1333,27 @@ void ControlManagerNode::external_loop_timer_callback()
     last_waypoint_.use_linear_velocity = false;
     last_waypoint_.use_angular_velocity = true;
     last_waypoint_.use_individual_thrust = false;
+    current_horizon_path_.assign(acados_params_.N + 1, last_waypoint_);
 
     nmpc_solution_ = nmpc_controller_.getCorrection(last_waypoint_, odometry_);
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
   } else {
-    current_horizon_path_ = agile_planner_.getTrajectory(
-      acados_params_.N + 1, this->get_clock()->now().seconds());
+    current_horizon_path_ = external_control ? std::move(selection.references) :
+      agile_planner_.getTrajectory(acados_params_.N + 1, this->get_clock()->now().seconds());
     if (safe_area_.enabled && diagnostics_.is_fly && !emergency_hover_) {
       check_safe_area();
+      if (emergency_hover_) {
+        // Apply the emergency trajectory in this iteration, before the solver.
+        current_horizon_path_ = agile_planner_.getTrajectory(
+          acados_params_.N + 1, this->get_clock()->now().seconds());
+        reference_horizon_selector_->reset();
+        selection.source = ReferenceHorizonSelector::Source::Planner;
+        external_control = false;
+      }
     }
 
-    if (agile_planner_.isHover() && check_heading_error() > 0.15) {
+    if (!external_control && agile_planner_.isHover() && check_heading_error() > 0.15) {
       for (auto i = 0; i < acados_params_.N + 1; i++) {
         current_horizon_path_[i].twist.angular.z = heading_correction(
           quaternion_to_heading(odometry_.pose.pose.orientation),
@@ -1218,9 +1366,29 @@ void ControlManagerNode::external_loop_timer_callback()
     diagnostics_.ocp_elapsed_time_ms = nmpc_controller_.getOcpElapsedTime();
     diagnostics_.header.stamp = get_clock()->now();
 
-    diagnostics_.reference_horizon = current_horizon_path_;
     last_waypoint_ = current_horizon_path_[0];
     lock_waypoint_ = 0;
+  }
+  diagnostics_.reference_horizon = current_horizon_path_;
+  if (selection.source != active_reference_source_) {
+    if (selection.source == ReferenceHorizonSelector::Source::Hold) {
+      RCLCPP_WARN(get_logger(), "External reference unavailable; holding measured pose: %s",
+        reference_reason.c_str());
+    } else if (selection.source == ReferenceHorizonSelector::Source::External) {
+      RCLCPP_INFO(get_logger(), "NMPC using external horizon, episode %s",
+        std::to_string(fresh_horizon->episode_id).c_str());
+    } else {
+      RCLCPP_INFO(get_logger(), "NMPC using AgilePlanner for flight procedure or emergency hover");
+    }
+    active_reference_source_ = selection.source;
+  }
+  if (external_control) {
+    const bool had_goal = diagnostics_.have_goal;
+    diagnostics_.have_goal = selection.source == ReferenceHorizonSelector::Source::External &&
+      external_reference_has_goal();
+    if (had_goal && !diagnostics_.have_goal) {
+      calculate_rmse_ = true;
+    }
   }
   have_nmpc_solution_ = true;
 
@@ -1301,7 +1469,7 @@ void ControlManagerNode::external_loop_timer_callback()
     }
   }
 
-  if (diagnostics_.have_goal) {
+  if (!external_control && diagnostics_.have_goal) {
     if (agile_planner_.isHover()) {
       if (euclidean_distance(
           odometry_.pose.pose.position,

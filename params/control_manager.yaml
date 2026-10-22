@@ -7,7 +7,12 @@
 
     takeoff:
       height: 5.0 # m
-      speed: 1.0 # m/s
+      speed: 0.8 # m/s
+
+    reference:
+      source: agile_planner # agile_planner or external (PPO, after takeoff)
+      maximum_age: 0.2 # s, for both ROS timestamp and time since reception
+      future_tolerance: 0.02 # s, maximum allowed lead over the ROS clock
 
     drone_avoidance:
       time_window: 0.5 # s
@@ -48,4 +53,3 @@
         #     |                                  | 
         #     |                                  | 
         # (-2.0, 2.0) --------------------- (-2.0, -2.0)
-

@@ -20,6 +20,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
+find_package(laser_uav_multi_drones REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -43,6 +44,7 @@ set(dependencies
     tf2
     tf2_ros
     laser_msgs
+    laser_uav_multi_drones
     laser_uav_planners
     laser_uav_controllers
     laser_uav_estimators
@@ -128,6 +130,11 @@ install(DIRECTORY launch params plotjuggler DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/refactor_plotjuggler_config.sh DESTINATION lib/${PROJECT_NAME})
 
 if (BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_reference_horizon_buffer test/test_reference_horizon_buffer.cpp)
+  ament_target_dependencies(test_reference_horizon_buffer rclcpp laser_msgs laser_uav_multi_drones)
+  ament_add_gtest(test_reference_horizon_selector test/test_reference_horizon_selector.cpp)
+  ament_target_dependencies(test_reference_horizon_selector laser_msgs laser_uav_multi_drones)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)

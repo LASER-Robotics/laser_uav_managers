@@ -35,6 +35,9 @@
 #include <laser_uav_lib/filter/irr_filter.hpp>
 #include <laser_uav_lib/metrics/rmse.hpp>
 #include <laser_uav_planners/agile_planner.hpp>
+#include <laser_uav_managers/reference_horizon_buffer.hpp>
+#include <laser_uav_managers/reference_horizon_selector.hpp>
+#include <laser_uav_multi_drones/srv/get_reference_horizon.hpp>
 
 using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -89,10 +92,18 @@ private:
   void check_safe_area();
   bool estimate_mass();
   double heading_correction(double current_heading, double target_heading);
+  laser_msgs::msg::ReferenceState external_hover_candidate();
+  bool external_reference_has_goal();
 
   // Subscribers and callbacks
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr sub_odometry_;
   void odometry_callback(const nav_msgs::msg::Odometry &msg);
+
+  rclcpp::Subscription<ReferenceHorizonBuffer::Horizon>::ConstSharedPtr
+      sub_reference_horizon_;
+  void reference_horizon_callback(const ReferenceHorizonBuffer::Horizon &msg);
+  ReferenceHorizonBuffer::Horizon::ConstSharedPtr get_valid_reference_horizon(
+      std::string &reason) const;
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr
       sub_odometry_gps_;
@@ -127,6 +138,12 @@ private:
   void api_diagnostics_callback(const laser_msgs::msg::ApiPx4Diagnostics &msg);
 
   // Services
+  rclcpp::Service<laser_uav_multi_drones::srv::GetReferenceHorizon>::SharedPtr
+      srv_get_reference_horizon_;
+  void get_reference_horizon_service_callback(
+      const std::shared_ptr<laser_uav_multi_drones::srv::GetReferenceHorizon::Request> request,
+      std::shared_ptr<laser_uav_multi_drones::srv::GetReferenceHorizon::Response> response);
+
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_takeoff_;
   void takeoff_service_callback(
       const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
@@ -165,6 +182,14 @@ private:
   laser_msgs::msg::ReferenceState last_waypoint_;
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
+
+  // Validated external references and selection of the NMPC input.
+  std::unique_ptr<ReferenceHorizonBuffer> reference_horizon_buffer_;
+  std::unique_ptr<ReferenceHorizonSelector> reference_horizon_selector_;
+  std::string reference_source_{"agile_planner"};
+  ReferenceHorizonSelector::Source active_reference_source_{ReferenceHorizonSelector::Source::Planner};
+  double reference_maximum_age_{0.2};
+  double reference_future_tolerance_{0.02};
 
   // Planners and controllers
   laser_uav_planners::multirotor_t planner_multirotor_params_;
