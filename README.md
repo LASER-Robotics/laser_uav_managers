@@ -1,12 +1,12 @@
 # LASER UAV Managers
 
-ROS 2 package containing the high-level management nodes for the Laser UAV System (LUS).
+ROS 2 package containing the high-level management nodes for the LASER UAV System (LUS).
 
 ##  About the Package
 
 The nodes contained here are responsible for:
--   Implementing state machines for missions (e.g., Takeoff -> Navigate to Waypoint -> Land).
--   Translating high-level intentions (like "go to point A") into commands that the controllers can understand (like attitude and thrust setpoints).
+-   Managing local takeoff, hold and landing transitions.
+-   Tracking references from external planners and publishing attitude/thrust or motor commands.
 -   Orchestrating the transition between different flight modes.
 -   Managing the estimation of all variables used for control loop feedback.
 
@@ -15,47 +15,91 @@ The nodes contained here are responsible for:
 Below is a list of the main ROS 2 nodes provided by this package.
 
 ### 1. `control_manager`
--   **Description:** This node instantiates the controller classes, organizing the main control loop and managing the UAV's state machines.
-  
--   **Subscribed Topics:**
-    -   `/$UAV_NAME/px4_api/motor_speed_estimated`: Used to feed the INDI controller, which requires estimated motor angular velocities.
-    -   `/$UAV_NAME/px4_api/diagnostics`: To check flight controller information, such as whether the drone is armed and if the controller is in offboard mode.
-    -   `/$UAV_NAME/estimation_manager/estimation`: To receive the drone's current state vector (position, orientation, velocities).
-    -   `/$UAV_NAME/control_manager/trajectory_path`: To receive a list of waypoints for a mission trajectory.
-    -   `/$UAV_NAME/control_manager/goto`: To receive a single waypoint for a go-to command.
-      
--   **Published Topics:**
-    -   `/$UAV_NAME/control_manager/diagnostics`: Publishes comprehensive status information about the control manager, including the latest internal planner request, takeoff completion status, current waypoint, motor-level control inputs, and state machine flags.
-    -   `/$UAV_NAME/control_manager/attitude_rates_thrust`: Publishes references for angular rates and a normalized total thrust value to the low-level controllers.
-    -   `/$UAV_NAME/control_manager/motor_speed_reference`: Publishes references for the angular rates of each motor.
 
--   **Services:**
-    -   `/control_manager/takeoff` (`laser_msgs/srv/SetString`): Service to trigger the takeoff routine.
-    -   `/control_manager/land` (`laser_msgs/srv/SetString`): Service to trigger the landing routine.
-      
--   **Configurable Parameters:**
-    ```yaml
-    # Do not change these parameters
-    rate: # Hz
-      external_loop_control: 100.0 
-      internal_loop_control: 250.0 
-      diagnostics: 100.0
+This lifecycle node tracks external navigation references with the existing
+`laser_uav_controllers::NmpcController` and optional `IndiController`. It no
+longer instantiates `laser_uav_planners::AgilePlanner` or computes PMM routes.
 
-    takeoff:
-      height: 1.5 # m
-      speed: 1.0 # m/s
+The package, namespace, component, executable and hardware interfaces retain
+their LASER names: `laser_uav_managers`, `laser_uav_managers::ControlManagerNode`
+and `control_manager`.
 
-    # If enabled, this parameter prioritizes reaching the required speed; if disabled, waypoint arrival precision is prioritized.
-    agile_fly: true
+**Inputs and outputs**
 
-    filter_params: # These parameters are for the low-pass filters used on IMU data and motor angular velocity estimation before entering the INDI controller
-      butterworth:
-        gyro_a: [1.0000, -1.5782, 0.6528]
-        gyro_b: [0.018650, 0.037301, 0.018650]
+| Interface | Type / purpose |
+| --- | --- |
+| `odometry_in` | `nav_msgs/Odometry`; measured state for control feedback |
+| `api_diagnostics_in` | `laser_msgs/ApiPx4Diagnostics`; armed/offboard gate |
+| `imu_in`, `motor_speed_estimation_in` | Existing INDI feedback inputs |
+| `polynomial_trajectory_in` | `mars_quadrotor_msgs/PolynomialTrajectory`; external navigation |
+| `attitude_rates_thrust_out`, `motor_speed_reference_out` | Existing hardware commands |
+| `diagnostics_out` | `laser_msgs/UavControlDiagnostics` |
+| `reference_horizon_out` | `nav_msgs/Path`; visualization of the sampled reference |
+| `takeoff`, `land` | `std_srvs/Trigger`; local flight transitions |
 
-        motor_a: [1.0000, -1.5782, 0.6528]
-        motor_b: [0.018650, 0.037301, 0.018650]
-    ```
+`control_manager.launch.py` retains `control_manager_file`,
+`uav_parameters_file` and `nmpc_controller_file`. Physical parameters, gains and
+the ACADOS solver remain in the existing LASER packages. `agile_planner_file`
+and the `goto`, `goto_relative`, and `trajectory_path` subscribers have been
+removed from control; their navigation ownership is part of the proposed
+[planning manager](docs/planning_manager_audit.md), not implemented in this branch.
+
+```bash
+ros2 launch laser_uav_managers control_manager.launch.py \
+  uav_parameters_file:=/path/to/uav.yaml \
+  odometry_topic:=/uav1/estimation_manager/estimation \
+  polynomial_trajectory_topic:=/planning_cmd/poly_traj
+```
+
+`odometry_topic` is explicit so deployments using FAST-LIO directly can retain
+that source. The default remains the original LUS estimate topic. The launch
+keeps the original IMU and motor-speed remappings for INDI.
+
+**Reference and timing contract**
+
+- The first valid odometry initializes the commanded reference once. Later
+  measurements update feedback, not the reference origin.
+- Takeoff and landing start from the last commanded reference. Their quintic
+  profiles use elapsed ROS time and configured speed. Hold keeps its target
+  fixed. Landing, rampdown and safety hold take priority over navigation.
+- After takeoff and mass calibration, external position/yaw polynomials are
+  sampled at `now + i * dt`, for `N + 1` states. The polynomial start times must
+  use the same ROS clock as the manager. No position replanning occurs here.
+- A polynomial received during takeoff is retained for subsequent navigation;
+  landing discards external navigation. Only a heartbeat matching the stored
+  polynomial start time refreshes its deadline.
+- An expired input holds the last commanded state when `hold_on_stale` is
+  enabled. A finished trajectory holds its endpoint, including when the
+  vehicle has not reached it yet. Missing yaw keeps the commanded heading.
+- The existing single-threaded executor/default callback group serializes
+  callbacks. No trajectory mutex or planner worker runs inside the controller.
+  The configured rates remain 100 Hz outer control and 250 Hz INDI; these are
+  targets, not a measured guarantee.
+
+The artificial `<uav>/cm_odometry_debug -> <uav>/fcu` TF and benchmark CSV are
+preserved. The benchmark observes `/goal_pose`; it never changes the reference.
+Its portable default path is `/tmp/laser_uav_control_metrics.csv`, configurable
+through `benchmark_metrics.csv_path`. CSV output retains the 13-column schema.
+`reference_horizon_topic` configures the visualization output; `nav_msgs/Path`
+is not a command interface because it contains no velocity or control flags.
+
+**Validation**
+
+`test_reference_horizons` contains 19 migrated regression tests covering fixed
+references under changing odometry, external polynomial/yaw sampling, timeout,
+emergency hold, landing priority, SUPER heartbeat matching, the original NMPC
+solve path, artificial TF, and CSV completion.
+
+```bash
+colcon build --packages-select laser_uav_managers --allow-overriding laser_uav_managers
+colcon test --packages-select laser_uav_managers \
+  --ctest-args -R '^test_reference_horizons$' --output-on-failure
+```
+
+The controller executable/component remains the original LASER entry point.
+The planning manager is an audit/proposal only; PMM navigation is intentionally
+unavailable until its separate node is implemented. External polynomial
+publishers, including SUPER, can already drive navigation after takeoff.
 
 ### 2. `estimation_manager`
 

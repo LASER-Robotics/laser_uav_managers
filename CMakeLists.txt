@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.8)
 project(laser_uav_managers)
 
-if (NOT CMAKE_CXX_STANDARD)
+if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
-endif ()
+endif()
 
-if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
-endif ()
+endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -18,12 +18,11 @@ find_package(rclcpp_components REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
+find_package(mars_quadrotor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(laser_uav_planners REQUIRED)
 find_package(laser_uav_controllers REQUIRED)
 find_package(laser_uav_estimators REQUIRED)
 find_package(laser_uav_lib REQUIRED)
@@ -43,14 +42,13 @@ set(dependencies
     tf2
     tf2_ros
     laser_msgs
-    laser_uav_planners
+    mars_quadrotor_msgs
     laser_uav_controllers
     laser_uav_estimators
     laser_uav_lib
-    )
+)
 
 find_library(laser_uav_lib laser_uav_lib)
-find_library(laser_uav_planners laser_uav_planners)
 find_library(laser_uav_controllers laser_uav_controllers)
 find_library(laser_uav_estimators laser_uav_estimators)
 
@@ -66,7 +64,7 @@ include_directories(
   ${acados_include}/acados/
   ${acados_include}/qpOASES_e/
   ${EIGEN3_INCLUDE_DIR}
-  )
+)
 
 set(control_executable_name control_manager)
 
@@ -81,11 +79,14 @@ ament_target_dependencies(${control_executable_name} ${dependencies})
 target_link_libraries(
   ${control_executable_name}
   ${library_name}
-  ${laser_uav_planners}
+)
+
+target_link_libraries(
+  ${library_name}
   ${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_multirotor_ode.so
   ${acados_lib}/libacados.so
-  )
+)
 
 ament_target_dependencies(${library_name} ${dependencies})
 
@@ -115,11 +116,12 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
-  )
+)
 
-install(TARGETS ${control_executable_name} ${estimation_executable_name}
-        RUNTIME DESTINATION lib/${PROJECT_NAME}
-        )
+install(
+  TARGETS ${control_executable_name} ${estimation_executable_name}
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 
 install(DIRECTORY include/ DESTINATION include/)
 
@@ -127,12 +129,21 @@ install(DIRECTORY launch params plotjuggler DESTINATION share/${PROJECT_NAME})
 
 install(PROGRAMS scripts/refactor_plotjuggler_config.sh DESTINATION lib/${PROJECT_NAME})
 
-if (BUILD_TESTING)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_reference_horizons test/test_reference_horizons.cpp)
+  target_compile_definitions(test_reference_horizons PRIVATE
+    TEST_MANAGER_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/control_manager.yaml"
+    TEST_UAV_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/laser_uavs/x500.yaml"
+    TEST_CONTROLLER_CONFIG_PATH="${laser_uav_controllers_DIR}/../params/nmpc_controller/x500.yaml")
+  ament_target_dependencies(test_reference_horizons ${dependencies})
+  target_link_libraries(test_reference_horizons ${library_name})
+
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
-endif ()
+endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(${dependencies})
