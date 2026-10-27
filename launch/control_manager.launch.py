@@ -71,8 +71,8 @@ def generate_launch_description():
 
     for argument_name, default_topic in [
         ('odometry_topic', '/' + uav_name + '/estimation_manager/estimation'),
-        ('polynomial_trajectory_topic', '/planning_cmd/poly_traj'),
-        ('reference_horizon_topic', '/' + uav_name + '/control_manager/reference_horizon'),
+        ('reference_horizon_topic', '/' + uav_name + '/planning_manager/reference_horizon'),
+        ('planning_diagnostics_topic', '/' + uav_name + '/planning_manager/diagnostics'),
     ]:
         declared_arguments.append(
             DeclareLaunchArgument(argument_name, default_value=default_topic)
@@ -101,10 +101,14 @@ def generate_launch_description():
             ('/' + uav_name + '/diagnostics_out', '/' + uav_name + '/control_manager/diagnostics'),
             ('/' + uav_name + '/attitude_rates_thrust_out', '/' +
              uav_name + '/control_manager/attitude_rates_thrust'),
-            ('/' + uav_name + '/polynomial_trajectory_in',
-             LaunchConfiguration('polynomial_trajectory_topic')),
-            ('/' + uav_name + '/reference_horizon_out',
+            ('/' + uav_name + '/reference_horizon_in',
              LaunchConfiguration('reference_horizon_topic')),
+            ('/' + uav_name + '/planning_diagnostics_in',
+             LaunchConfiguration('planning_diagnostics_topic')),
+            ('/' + uav_name + '/control_state_out',
+             '/' + uav_name + '/control_manager/state'),
+            ('/' + uav_name + '/reference_horizon_out',
+             '/' + uav_name + '/control_manager/reference_path'),
             ('/' + uav_name + '/takeoff', '/' + uav_name + '/control_manager/takeoff'),
             ('/' + uav_name + '/land', '/' + uav_name + '/control_manager/land'),
             ('/' + uav_name + '/api_diagnostics_in', '/' + uav_name + '/hw_api/diagnostics'),

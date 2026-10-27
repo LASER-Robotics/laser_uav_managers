@@ -20,6 +20,8 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(mars_quadrotor_msgs REQUIRED)
+find_package(laser_uav_planners REQUIRED)
+find_package(Threads REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -42,7 +44,6 @@ set(dependencies
     tf2
     tf2_ros
     laser_msgs
-    mars_quadrotor_msgs
     laser_uav_controllers
     laser_uav_estimators
     laser_uav_lib
@@ -51,6 +52,7 @@ set(dependencies
 find_library(laser_uav_lib laser_uav_lib)
 find_library(laser_uav_controllers laser_uav_controllers)
 find_library(laser_uav_estimators laser_uav_estimators)
+find_library(laser_uav_planners laser_uav_planners)
 
 link_directories(${full_model_build})
 
@@ -94,6 +96,18 @@ target_include_directories(${library_name} PRIVATE src/include)
 
 rclcpp_components_register_nodes(${library_name} "laser_uav_managers::ControlManagerNode")
 
+set(planning_library_name ${PROJECT_NAME}_planning_manager_core)
+set(planning_dependencies
+  Eigen3 rclcpp rclcpp_lifecycle rclcpp_components geometry_msgs nav_msgs std_srvs
+  laser_msgs laser_uav_planners mars_quadrotor_msgs)
+add_library(${planning_library_name} SHARED src/planning_manager_node.cpp)
+ament_target_dependencies(${planning_library_name} ${planning_dependencies})
+target_link_libraries(${planning_library_name} ${laser_uav_planners} Threads::Threads)
+rclcpp_components_register_nodes(${planning_library_name} "laser_uav_managers::PlanningManagerNode")
+add_executable(planning_manager src/planning_manager_main.cpp)
+ament_target_dependencies(planning_manager ${planning_dependencies})
+target_link_libraries(planning_manager ${planning_library_name})
+
 set(estimation_library_name "estimation_manager_node")
 set(estimation_executable_name "estimation_manager_main")
 
@@ -112,14 +126,14 @@ target_link_libraries(${estimation_executable_name} ${estimation_library_name})
 rclcpp_components_register_nodes(${estimation_library_name} "laser_uav_managers::EstimationManager")
 
 install(
-  TARGETS ${library_name} ${estimation_library_name}
+  TARGETS ${library_name} ${estimation_library_name} ${planning_library_name}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
 install(
-  TARGETS ${control_executable_name} ${estimation_executable_name}
+  TARGETS ${control_executable_name} ${estimation_executable_name} planning_manager
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -135,9 +149,10 @@ if(BUILD_TESTING)
   target_compile_definitions(test_reference_horizons PRIVATE
     TEST_MANAGER_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/control_manager.yaml"
     TEST_UAV_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/laser_uavs/x500.yaml"
+    TEST_PLANNER_CONFIG_PATH="${laser_uav_planners_DIR}/../params/agile_planner/x500.yaml"
     TEST_CONTROLLER_CONFIG_PATH="${laser_uav_controllers_DIR}/../params/nmpc_controller/x500.yaml")
-  ament_target_dependencies(test_reference_horizons ${dependencies})
-  target_link_libraries(test_reference_horizons ${library_name})
+  ament_target_dependencies(test_reference_horizons ${dependencies} ${planning_dependencies})
+  target_link_libraries(test_reference_horizons ${library_name} ${planning_library_name})
 
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
@@ -146,5 +161,5 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_include_directories(include)
-ament_export_dependencies(${dependencies})
+ament_export_dependencies(${dependencies} ${planning_dependencies})
 ament_package()

@@ -1,0 +1,11 @@
+/**/**:
+  ros__parameters:
+    planner: pmm
+    rate:
+      reference_horizon: 100.0
+    control_state_timeout: 0.5
+    planning_timeout: 5.0
+    waypoint_hold_time: 3.0
+    super:
+      timeout: 0.5
+      sampling_step: 0.01

@@ -14,92 +14,152 @@ The nodes contained here are responsible for:
 
 Below is a list of the main ROS 2 nodes provided by this package.
 
-### 1. `control_manager`
+### 1. `control_manager` and `planning_manager`
 
-This lifecycle node tracks external navigation references with the existing
-`laser_uav_controllers::NmpcController` and optional `IndiController`. It no
-longer instantiates `laser_uav_planners::AgilePlanner` or computes PMM routes.
+`ControlManagerNode` owns takeoff, landing, hold, safety, mass calibration,
+NMPC/INDI and hardware commands. `PlanningManagerNode` owns navigation goals,
+waypoint sequencing and the selected PMM or SUPER planner. Both are lifecycle
+nodes, launched as separate processes.
 
-The package, namespace, component, executable and hardware interfaces retain
-their LASER names: `laser_uav_managers`, `laser_uav_managers::ControlManagerNode`
-and `control_manager`.
+The first valid odometry initializes the commanded reference once. Subsequent
+odometry is feedback only. Local maneuvers and safety hold begin at the last
+commanded reference; they never capture a new target from live odometry.
+The artificial `<uav>/cm_odometry_debug -> <uav>/fcu` TF remains available.
 
-**Inputs and outputs**
+| Owner | Interface | Type / purpose |
+| --- | --- | --- |
+| Control | `odometry_in`, `imu_in`, `motor_speed_estimation_in` | Existing feedback inputs |
+| Control | `api_diagnostics_in` | Existing armed/offboard gate |
+| Control | `reference_horizon_in` | `laser_msgs/ReferenceHorizon`; timed trajectory window |
+| Control | `planning_diagnostics_in` | Native mission events and CSV metadata |
+| Control | `control_state_out` | `laser_msgs/UavControlState`; readiness, flight ID, N/dt, commanded state, calibrated mass |
+| Control | `diagnostics_out` | Existing `laser_msgs/UavControlDiagnostics` |
+| Control | `reference_horizon_out` | `nav_msgs/Path`; debug output only |
+| Control | `attitude_rates_thrust_out`, `motor_speed_reference_out` | Existing hardware commands |
+| Control | `takeoff`, `land` | `std_srvs/Trigger`; local maneuvers |
+| Planning | `goto_in`, `goto_relative_in` | `laser_msgs/PoseWithHeading` |
+| Planning | `trajectory_path_in` | `laser_msgs/TrajectoryPath` |
+| Planning | `cancel` | `std_srvs/Trigger`; abort navigation and request commanded hold |
+| Planning | `reference_horizon_out` | Native trajectory windows |
+| Planning | `diagnostics_out` | `laser_msgs/UavPlanningDiagnostics`; mission progress |
+| Planning | `super_goal_out`, `super_trajectory_in` | Private SUPER goal and polynomial interfaces |
 
-| Interface | Type / purpose |
-| --- | --- |
-| `odometry_in` | `nav_msgs/Odometry`; measured state for control feedback |
-| `api_diagnostics_in` | `laser_msgs/ApiPx4Diagnostics`; armed/offboard gate |
-| `imu_in`, `motor_speed_estimation_in` | Existing INDI feedback inputs |
-| `polynomial_trajectory_in` | `mars_quadrotor_msgs/PolynomialTrajectory`; external navigation |
-| `attitude_rates_thrust_out`, `motor_speed_reference_out` | Existing hardware commands |
-| `diagnostics_out` | `laser_msgs/UavControlDiagnostics` |
-| `reference_horizon_out` | `nav_msgs/Path`; visualization of the sampled reference |
-| `takeoff`, `land` | `std_srvs/Trigger`; local flight transitions |
+The launch places navigation commands at `/<uav>/planning_manager/goto`,
+`goto_relative`, `trajectory_path` and `cancel`. Control services remain at
+`/<uav>/control_manager/takeoff` and `land`. There are no aliases to the old
+control-manager goal topics, no input-format selector, and no polynomial
+subscriber in control.
 
-`control_manager.launch.py` retains `control_manager_file`,
-`uav_parameters_file` and `nmpc_controller_file`. Physical parameters, gains and
-the ACADOS solver remain in the existing LASER packages. `agile_planner_file`
-and the `goto`, `goto_relative`, and `trajectory_path` subscribers have been
-removed from control; their navigation ownership is part of the proposed
-[planning manager](docs/planning_manager_audit.md), not implemented in this branch.
+**Trajectory timing**
+
+`ReferenceHorizon` preserves the complete `ReferenceState`, including attitude,
+velocities, motor thrust and usage flags. `header.stamp` is the publication time;
+`start_time + time_from_start[i]` identifies each sample. Offsets may be irregular
+and must increase strictly. All nodes use the same ROS clock and coordinate frame.
+
+Only control interpolates those samples onto `now + i * dt`, for `N + 1` states.
+It uses linear interpolation and quaternion slerp, validates full future coverage,
+and never extrapolates. PMM returns raw samples and relative times; its API has no
+controller dt, execution clock or hover state. Planning slices that raw trajectory
+into windows. SUPER polynomials are evaluated inside the existing planning node
+at `super.sampling_step`, independently of the controller grid. No separate
+`reference_horizon` or `super_trajectory` helper class/files are required.
+
+PMM optimization runs in a worker capturing its inputs by value. The planning
+timer continues to publish the existing segment while the next one is generated.
+No planner worker or trajectory mutex runs inside control. Timers still share the
+existing single-threaded control executor: configured 100 Hz outer / 250 Hz INDI
+rates are targets, not a real-time guarantee.
+
+Missing, expired or incomplete references latch the last commanded pose. A new
+mission ID is required to resume after timeout/abort. Takeoff/landing reject
+navigation windows. Flight IDs prevent an earlier flight from resuming after a
+new takeoff. A `terminal` window must contain a fixed pose and zero velocities;
+only that stationary endpoint may outlive its sample window and receive timeout.
+
+**Setup and supported missions**
+
+Build the three native repositories on `dev/separate_planning_and_control`:
 
 ```bash
-ros2 launch laser_uav_managers control_manager.launch.py \
-  uav_parameters_file:=/path/to/uav.yaml \
-  odometry_topic:=/uav1/estimation_manager/estimation \
-  polynomial_trajectory_topic:=/planning_cmd/poly_traj
+colcon build --packages-select laser_msgs laser_uav_planners laser_uav_managers \
+  --allow-overriding laser_msgs laser_uav_planners laser_uav_managers
+source install/setup.bash
+ros2 launch laser_uav_managers planning_manager.launch.py planner:=pmm
 ```
 
-`odometry_topic` is explicit so deployments using FAST-LIO directly can retain
-that source. The default remains the original LUS estimate topic. The launch
-keeps the original IMU and motor-speed remappings for INDI.
+The `laser_uav_tui` branch with the same name publishes navigation goals to the
+new planning-manager topics; rebuild that package when using the TUI.
 
-**Reference and timing contract**
-
-- The first valid odometry initializes the commanded reference once. Later
-  measurements update feedback, not the reference origin.
-- Takeoff and landing start from the last commanded reference. Their quintic
-  profiles use elapsed ROS time and configured speed. Hold keeps its target
-  fixed. Landing, rampdown and safety hold take priority over navigation.
-- After takeoff and mass calibration, external position/yaw polynomials are
-  sampled at `now + i * dt`, for `N + 1` states. The polynomial start times must
-  use the same ROS clock as the manager. No position replanning occurs here.
-- A polynomial received during takeoff is retained for subsequent navigation;
-  landing discards external navigation. Only a heartbeat matching the stored
-  polynomial start time refreshes its deadline.
-- An expired input holds the last commanded state when `hold_on_stale` is
-  enabled. A finished trajectory holds its endpoint, including when the
-  vehicle has not reached it yet. Missing yaw keeps the commanded heading.
-- The existing single-threaded executor/default callback group serializes
-  callbacks. No trajectory mutex or planner worker runs inside the controller.
-  The configured rates remain 100 Hz outer control and 250 Hz INDI; these are
-  targets, not a measured guarantee.
-
-The artificial `<uav>/cm_odometry_debug -> <uav>/fcu` TF and benchmark CSV are
-preserved. The benchmark observes `/goal_pose`; it never changes the reference.
-Its portable default path is `/tmp/laser_uav_control_metrics.csv`, configurable
-through `benchmark_metrics.csv_path`. CSV output retains the 13-column schema.
-`reference_horizon_topic` configures the visualization output; `nav_msgs/Path`
-is not a command interface because it contains no velocity or control flags.
-
-**Validation**
-
-`test_reference_horizons` contains 19 migrated regression tests covering fixed
-references under changing odometry, external polynomial/yaw sampling, timeout,
-emergency hold, landing priority, SUPER heartbeat matching, the original NMPC
-solve path, artificial TF, and CSV completion.
+`planner` is read-only and chosen before startup. PMM does not start or resolve
+the optional `super_planner` executable. Select SUPER explicitly:
 
 ```bash
-colcon build --packages-select laser_uav_managers --allow-overriding laser_uav_managers
+ros2 launch laser_uav_managers planning_manager.launch.py planner:=super \
+  odometry_topic:=/uav1/estimation_manager/estimation \
+  reference_frame:=uav1/odometry cloud_topic:=/cloud_registered
+```
+
+`UAV_NAME` and `UAV_TYPE` retain their LASER conventions. The launch shares the
+physical YAML and odometry source across the two managers. The PMM receives the
+calibrated mass before generating a segment. Controller gains and ACADOS remain
+in `laser_uav_controllers`, without another solver copy in planning.
+
+SUPER requires the corresponding branch of its repository: its ROS interface
+publishes the configured `reference_frame_id` and propagates `EMER_STOP` in the
+heartbeat. A cloud supplied by `cloud_topic` must already be transformed into
+the **actual odometry frame**. Setting `reference_frame` names that existing
+coordinate system; it does not transform the cloud or the odometry. The sensor
+pipeline owns that transformation, outside both managers. Vendor YAML topic
+names are remapped by the launch; a custom SUPER config must retain those
+remapping source names or provide matching integration remaps.
+
+PMM supports one goal, a fly-through waypoint list, or a list with a configured
+hold at each waypoint. SUPER supports one goal or a list with stops; multi-goal
+fly-through requests are rejected. Mission submission requires hover; finish or
+cancel an active mission before submitting another. Backend switching and
+in-motion replacement of a mission are outside this implementation.
+SUPER uses its startup velocity limits; its waypoint requests require `speed=0`.
+Only PMM accepts a per-mission speed override.
+
+The `AgilePlanner` C++ API intentionally changed. Experimental
+`carrara_uav_managers` callers of its old constructor, `getTrajectory(N, time)`
+and `isHover()` have not been migrated; the package selection above builds the
+native LASER stack only. No compatibility wrappers were added.
+
+**Benchmark and validation**
+
+The benchmark consumes native mission events instead of a SUPER goal topic or
+heartbeat silence. A completed mission is recorded once after the measured UAV
+reaches the goal. Abort, timeout and landing cancel the run. The CSV keeps its
+13-column schema and now records the actual waypoint count. Its default path is
+`/tmp/laser_uav_control_metrics.csv`.
+
+`test_reference_horizons` covers commanded references under odometry drift,
+local-maneuver priority, native time interpolation, preserved attitude/thrust,
+invalid/stale/frame/flight input, missing coverage, terminal hold, abort,
+original NMPC execution, artificial TF, mission CSV, PMM worker cancellation,
+PMM-to-control windows and SUPER polynomials/yaw/heartbeat/emergency stop.
+It also checks that backend selection cannot change after startup.
+
+```bash
 colcon test --packages-select laser_uav_managers \
   --ctest-args -R '^test_reference_horizons$' --output-on-failure
 ```
 
-The controller executable/component remains the original LASER entry point.
-The planning manager is an audit/proposal only; PMM navigation is intentionally
-unavailable until its separate node is implemented. External polynomial
-publishers, including SUPER, can already drive navigation after takeoff.
+The [initial audit](docs/planning_manager_audit.md) records the earlier proposal;
+this README describes the implemented contract, including the subsequent user
+choices: no legacy inputs, interpolation in control, setup-only backend, and
+no additional trajectory helper files. Passing these software checks does not
+establish SITL or real-flight behavior or timer deadlines under flight load.
+
+Validation of this round (2026-10-27): the three native C++ packages, SUPER and
+the TUI built in isolated `/tmp/laser_clean_*` directories. All 29 GTests passed.
+Changed manager C++ files passed cppcheck/uncrustify; manager launches and CMake
+files passed their linters. Python syntax, YAML and package manifests parsed.
+The TUI still has existing lint failures outside the changed topic lines.
+The ROS transport reported blocked UDP sockets in this environment; publication
+checks in the tests exercised a shared process, not interprocess DDS or SITL.
 
 ### 2. `estimation_manager`
 

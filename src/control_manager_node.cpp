@@ -29,7 +29,7 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
 : rclcpp_lifecycle::LifecycleNode("control_manager", "", options)
 {
   RCLCPP_INFO(
-    get_logger(), "Creating external polynomial trajectory + NMPC lifecycle ControlManagerNode");
+    get_logger(), "Creating LASER reference horizon + NMPC lifecycle ControlManagerNode");
 
   declare_parameters_once();
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
@@ -97,23 +97,20 @@ void ControlManagerNode::declare_parameters_once()
   declare_parameter("safe_area.constraints.z", rclcpp::ParameterValue(std::vector<double>(2, 0.0)));
 
   // New parameters: only the external trajectory interface and its debug/completion behaviour.
-  declare_parameter("external_trajectory.timeout", rclcpp::ParameterValue(0.5));
-  declare_parameter("external_trajectory.hold_on_stale", rclcpp::ParameterValue(true));
-  declare_parameter("external_trajectory.goal_position_tolerance", rclcpp::ParameterValue(0.15));
-  declare_parameter("external_trajectory.goal_heading_tolerance", rclcpp::ParameterValue(0.15));
+  declare_parameter("reference.timeout", rclcpp::ParameterValue(0.5));
+  declare_parameter("goal.position_tolerance", rclcpp::ParameterValue(0.15));
+  declare_parameter("goal.heading_tolerance", rclcpp::ParameterValue(0.15));
   declare_parameter("debug.publish_reference_path", rclcpp::ParameterValue(true));
   declare_parameter("benchmark_metrics.enabled", rclcpp::ParameterValue(true));
   declare_parameter(
     "benchmark_metrics.csv_path",
     std::string("/tmp/laser_uav_control_metrics.csv"));
-  declare_parameter("benchmark_metrics.goal_topic", std::string("/goal_pose"));
-  declare_parameter("benchmark_metrics.heartbeat_end_timeout", rclcpp::ParameterValue(0.5));
 
 }
 
 CallbackReturn ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
 {
-  RCLCPP_INFO(get_logger(), "Configuring external polynomial trajectory + NMPC control manager");
+  RCLCPP_INFO(get_logger(), "Configuring LASER reference horizon + NMPC control manager");
 
   try {
     get_parameters();
@@ -145,10 +142,10 @@ CallbackReturn ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
   diagnostics_.have_goal = false;
 
   RCLCPP_INFO(
-    get_logger(), "Configured: N=%d dt=%.4f external=%.1fHz mode=%s external planner timeout=%.2fs",
+    get_logger(), "Configured: N=%d dt=%.4f external=%.1fHz mode=%s reference timeout=%.2fs",
     acados_params_.N, acados_params_.dt, rate_external_loop_control_,
     angular_rates_and_thrust_mode_ ? "body_rates+thrust" : "individual_thrust+INDI",
-    external_timeout_sec_);
+    reference_timeout_sec_);
 
   return CallbackReturn::SUCCESS;
 }
@@ -167,6 +164,7 @@ CallbackReturn ControlManagerNode::on_activate(const rclcpp_lifecycle::State &)
     pub_reference_path_->on_activate();
   }
 
+  pub_control_state_->on_activate();
   is_active_ = true;
   return CallbackReturn::SUCCESS;
 }
@@ -175,6 +173,11 @@ CallbackReturn ControlManagerNode::on_deactivate(const rclcpp_lifecycle::State &
 {
   RCLCPP_INFO(get_logger(), "Deactivating");
   cancel_benchmark();
+  lock_control_inputs_ = true;
+  takeoff_done_ = false;
+  have_external_reference_ = false;
+  publish_control_state();
+  pub_control_state_->on_deactivate();
 
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_->on_deactivate();
@@ -205,20 +208,20 @@ CallbackReturn ControlManagerNode::on_cleanup(const rclcpp_lifecycle::State &)
   sub_imu_.reset();
   sub_motor_speed_.reset();
   sub_api_diagnostics_.reset();
-  sub_polynomial_trajectory_.reset();
-  sub_benchmark_goal_.reset();
+  sub_reference_horizon_.reset();
+  sub_planning_diagnostics_.reset();
   cancel_benchmark();
 
   pub_attitude_rates_and_thrust_reference_.reset();
   pub_motor_speed_reference_.reset();
   pub_diagnostics_.reset();
   pub_reference_path_.reset();
+  pub_control_state_.reset();
 
   current_horizon_path_.clear();
-  have_external_position_trajectory_ = false;
-  external_emergency_stop_ = false;
-  have_external_rx_time_ = false;
-  stale_hold_active_ = false;
+  have_external_reference_ = false;
+  flight_id_ = accepted_mission_id_ = closed_mission_id_ = 0;
+  received_first_odometry_msg_ = false;
   rmse_run_active_ = false;
   estimated_rmse_.reset();
 
@@ -329,16 +332,12 @@ void ControlManagerNode::get_parameters()
   get_parameter("safe_area.constraints.z", aux);
   safe_area_.z = aux.as_double_array();
 
-  get_parameter("external_trajectory.timeout", external_timeout_sec_);
-  get_parameter("external_trajectory.hold_on_stale", hold_on_stale_);
-  get_parameter("external_trajectory.goal_position_tolerance", goal_position_tolerance_);
-  get_parameter("external_trajectory.goal_heading_tolerance", goal_heading_tolerance_);
+  get_parameter("reference.timeout", reference_timeout_sec_);
+  get_parameter("goal.position_tolerance", goal_position_tolerance_);
+  get_parameter("goal.heading_tolerance", goal_heading_tolerance_);
   get_parameter("debug.publish_reference_path", publish_reference_path_);
   get_parameter("benchmark_metrics.enabled", benchmark_.enabled);
   get_parameter("benchmark_metrics.csv_path", benchmark_.csv_path);
-  get_parameter("benchmark_metrics.goal_topic", benchmark_.goal_topic);
-  get_parameter("benchmark_metrics.heartbeat_end_timeout", benchmark_.heartbeat_timeout);
-  benchmark_.heartbeat_timeout = std::max(0.02, benchmark_.heartbeat_timeout);
 }
 
 void ControlManagerNode::validate_parameters() const
@@ -364,8 +363,8 @@ void ControlManagerNode::validate_parameters() const
   if (land_increment_rampdown_ <= 0.0) {
     throw std::runtime_error("land.increment_rampdown must be > 0");
   }
-  if (external_timeout_sec_ <= 0.0) {
-    throw std::runtime_error("external_trajectory.timeout must be > 0");
+  if (reference_timeout_sec_ <= 0.0) {
+    throw std::runtime_error("reference.timeout must be > 0");
   }
   if (
     safe_area_.enabled &&
@@ -390,15 +389,12 @@ void ControlManagerNode::configure_pub_sub()
     "api_diagnostics_in", 1,
     std::bind(&ControlManagerNode::api_diagnostics_callback, this, std::placeholders::_1));
 
-  sub_polynomial_trajectory_ = create_subscription<PolynomialTrajectory>(
-    "polynomial_trajectory_in", trajectory_qos,
-    std::bind(&ControlManagerNode::polynomial_trajectory_callback, this, std::placeholders::_1));
-
-  if (benchmark_.enabled) {
-    sub_benchmark_goal_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      benchmark_.goal_topic, 10,
-      std::bind(&ControlManagerNode::benchmark_goal_callback, this, std::placeholders::_1));
-  }
+  sub_reference_horizon_ = create_subscription<ReferenceHorizon>(
+    "reference_horizon_in", trajectory_qos,
+    std::bind(&ControlManagerNode::reference_horizon_callback, this, std::placeholders::_1));
+  sub_planning_diagnostics_ = create_subscription<PlanningDiagnostics>(
+    "planning_diagnostics_in", rclcpp::QoS(1).reliable().transient_local(),
+    std::bind(&ControlManagerNode::planning_diagnostics_callback, this, std::placeholders::_1));
 
   if (!angular_rates_and_thrust_mode_) {
     sub_imu_ = create_subscription<sensor_msgs::msg::Imu>(
@@ -419,7 +415,9 @@ void ControlManagerNode::configure_pub_sub()
 
   pub_diagnostics_ =
     create_publisher<laser_msgs::msg::UavControlDiagnostics>("diagnostics_out", 10);
-  pub_reference_path_ = create_publisher<nav_msgs::msg::Path>("reference_horizon_out", 1);
+  pub_reference_path_ = create_publisher<nav_msgs::msg::Path>("reference_path_out", 1);
+  pub_control_state_ = create_publisher<laser_msgs::msg::UavControlState>(
+    "control_state_out", rclcpp::QoS(1).reliable().transient_local());
 }
 
 void ControlManagerNode::configure_timers()
@@ -581,131 +579,216 @@ void ControlManagerNode::api_diagnostics_callback(const laser_msgs::msg::ApiPx4D
   }
 }
 
-void ControlManagerNode::polynomial_trajectory_callback(const PolynomialTrajectory & msg)
+void ControlManagerNode::reference_horizon_callback(const ReferenceHorizon & msg)
 {
-  if (!is_active_ || requested_land_ || land_done_) {
-    return;
-  }
-
-  if ((msg.type & PolynomialTrajectory::HEART_BEAT) != 0U && benchmark_.active &&
-    benchmark_.have_trajectory && std::abs(msg.start_wt_pos - benchmark_.trajectory_start) <= 1e-6)
+  if (!is_active_ || !takeoff_done_ || requested_land_ || land_rampdown_ ||
+    msg.flight_id != flight_id_ || msg.mission_id <= closed_mission_id_ ||
+    msg.mission_id < accepted_mission_id_ || msg.header.frame_id != reference_frame_id_ ||
+    msg.header.stamp.sec < 0 || msg.header.stamp.nanosec >= 1000000000U ||
+    msg.start_time.sec < 0 || msg.start_time.nanosec >= 1000000000U)
   {
-    benchmark_.last_heartbeat = std::chrono::steady_clock::now();
-    benchmark_.have_heartbeat = true;
-  }
-
-  if ((msg.type & PolynomialTrajectory::EMER_STOP) != 0U) {
-    if (!takeoff_done_) {
-      return;
-    }
-    external_emergency_stop_ = true;
-    RCLCPP_ERROR_THROTTLE(
-      get_logger(), *get_clock(), 1000,
-      "external planner EMER_STOP received; navigation tracking will switch to hold.");
     return;
   }
-
-  // IMPORTANT:
-  // SUPER publishes HEART_BEAT messages much more frequently than complete polynomials.
-  // A heartbeat proves that SUPER is alive, but it does NOT prove that the polynomial stored
-  // by this ControlManager is still the current committed trajectory.
-  //
-  // Only heartbeats naming the stored trajectory refresh its active deadline.
-  if ((msg.type & PolynomialTrajectory::POSITION_TRAJ) == 0U) {
-    if (
-      have_external_position_trajectory_ &&
-      std::abs(msg.start_wt_pos - latest_external_trajectory_.start_wt_pos) > 1e-6)
-    {
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 1000,
-        "SUPER heartbeat refers to committed trajectory start %.6f, but the last full polynomial "
-        "stored by ControlManager starts at %.6f. Waiting for a fresh POSITION_TRAJ.",
-        msg.start_wt_pos, latest_external_trajectory_.start_wt_pos);
-    } else if (have_external_position_trajectory_ &&
-      (msg.type & PolynomialTrajectory::HEART_BEAT) != 0U)
-    {
-      // Only the heartbeat for the stored polynomial can keep it active.
-      last_external_rx_steady_ = std::chrono::steady_clock::now();
-    }
+  std::string reason;
+  const double age = (get_clock()->now() - rclcpp::Time(msg.header.stamp)).seconds();
+  if (age < -0.001 || age > reference_timeout_sec_) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Rejected horizon publication stamp");
     return;
   }
-
-  const std::size_t pos_stride = static_cast<std::size_t>(msg.order_pos) + 1U;
-  const std::size_t pos_expected = static_cast<std::size_t>(msg.piece_num_pos) * pos_stride;
-  const auto finite_values = [](const std::vector<double> & values) {
-      return std::all_of(values.begin(), values.end(), [](double x) {return std::isfinite(x);});
-    };
-  const auto positive_durations = [&](const std::vector<double> & values) {
-      return finite_values(values) &&
-             std::all_of(values.begin(), values.end(), [](double x) {return x > 0.0;});
-    };
-  if (
-    msg.piece_num_pos == 0U || msg.time_pos.size() != msg.piece_num_pos ||
-    msg.coef_pos_x.size() != pos_expected || msg.coef_pos_y.size() != pos_expected ||
-    msg.coef_pos_z.size() != pos_expected || !std::isfinite(msg.start_wt_pos) ||
-    !positive_durations(msg.time_pos) || !finite_values(msg.coef_pos_x) ||
-    !finite_values(msg.coef_pos_y) || !finite_values(msg.coef_pos_z))
-  {
-    RCLCPP_ERROR(
-      get_logger(),
-      "Rejected malformed external planner position polynomial: pieces=%u order=%u time=%zu "
-      "coeff=(%zu,%zu,%zu) expected=%zu",
-      msg.piece_num_pos, msg.order_pos, msg.time_pos.size(), msg.coef_pos_x.size(),
-      msg.coef_pos_y.size(), msg.coef_pos_z.size(), pos_expected);
+  if (!validate_reference_horizon(msg, reason)) {
+    RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "Rejected horizon: %s", reason.c_str());
     return;
   }
-
-  if ((msg.type & PolynomialTrajectory::YAW_TRAJ) != 0U) {
-    const std::size_t yaw_stride = static_cast<std::size_t>(msg.order_yaw) + 1U;
-    const std::size_t yaw_expected = static_cast<std::size_t>(msg.piece_num_yaw) * yaw_stride;
-    if (
-      msg.piece_num_yaw == 0U || msg.time_yaw.size() != msg.piece_num_yaw ||
-      msg.coef_yaw.size() != yaw_expected || !std::isfinite(msg.start_wt_yaw) ||
-      !positive_durations(msg.time_yaw) || !finite_values(msg.coef_yaw))
+  if (have_external_reference_ && msg.mission_id == accepted_mission_id_) {
+    if (rclcpp::Time(msg.header.stamp) <= rclcpp::Time(latest_reference_.header.stamp) ||
+      (latest_reference_.terminal && !msg.terminal))
     {
-      RCLCPP_ERROR(get_logger(), "Rejected malformed external yaw polynomial");
       return;
     }
   }
-  if ((msg.type & PolynomialTrajectory::YAW_COMMAND) != 0U &&
-    (!std::isfinite(msg.yaw) || !std::isfinite(msg.yaw_rate)))
-  {
-    RCLCPP_ERROR(get_logger(), "Rejected non-finite external yaw command");
-    return;
-  }
-
-  // A full polynomial replaces the stored trajectory; matching heartbeats keep it fresh.
-  last_external_rx_steady_ = std::chrono::steady_clock::now();
-  have_external_rx_time_ = true;
-
-  // Store exactly the last valid POSITION_TRAJ published by SUPER.
-  latest_external_trajectory_ = msg;
-  if (benchmark_.active) {
-    benchmark_.have_trajectory = sample_external_terminal_reference(msg, benchmark_.terminal);
-    benchmark_.trajectory_start = msg.start_wt_pos;
-    benchmark_.trajectory_end = msg.start_wt_pos + trajectory_duration(msg.time_pos);
-    benchmark_.require_heading = (msg.type & (PolynomialTrajectory::YAW_TRAJ |
-      PolynomialTrajectory::YAW_COMMAND)) != 0U;
-    if ((msg.type & PolynomialTrajectory::YAW_TRAJ) != 0U) {
-      double yaw = 0.0, yaw_rate = 0.0;
-      sample_yaw(msg, msg.start_wt_yaw + trajectory_duration(msg.time_yaw), yaw, yaw_rate);
-      benchmark_.terminal.pose.orientation = heading_to_quaternion(yaw);
-    }
-    benchmark_.have_heartbeat = (msg.type & PolynomialTrajectory::HEART_BEAT) != 0U;
-    benchmark_.last_heartbeat = std::chrono::steady_clock::now();
-  }
-  have_external_position_trajectory_ = true;
-  stale_hold_active_ = false;
-  external_emergency_stop_ = false;
-  if (takeoff_done_) {
+  if (msg.mission_id > accepted_mission_id_) {
     emergency_hover_ = false;
   }
+  latest_reference_ = msg;
+  accepted_mission_id_ = msg.mission_id;
+  have_external_reference_ = true;
+  last_reference_rx_ = std::chrono::steady_clock::now();
+}
 
-  RCLCPP_INFO(
-    get_logger(),
-    "SUPER polynomial received: id=%u frame='%s' pieces=%u order=%u start_ros=%.6f duration=%.3fs",
-    msg.trajectory_id, msg.header.frame_id.c_str(), msg.piece_num_pos, msg.order_pos,
-    msg.start_wt_pos, trajectory_duration(msg.time_pos));
+bool ControlManagerNode::validate_reference_horizon(
+  const ReferenceHorizon & msg, std::string & reason) const
+{
+  const auto & refs = msg.reference_horizon;
+  const auto & times = msg.time_from_start;
+  if (refs.size() < 2 || refs.size() > 65536 || refs.size() != times.size()) {
+    reason = "reference samples require matching time offsets";
+    return false;
+  }
+  for (std::size_t i = 0; i < refs.size(); ++i) {
+    if (!std::isfinite(times[i]) || times[i] < 0.0 || (i > 0 && times[i] <= times[i - 1])) {
+      reason = "sample times must increase strictly";
+      return false;
+    }
+    const auto & r = refs[i];
+    const auto & p = r.pose.position;
+    const auto & q = r.pose.orientation;
+    const auto & v = r.twist.linear;
+    const auto & w = r.twist.angular;
+    for (double x : {p.x, p.y, p.z, q.w, q.x, q.y, q.z, v.x, v.y, v.z, w.x, w.y, w.z}) {
+      if (!std::isfinite(x)) {
+        reason = "non-finite reference";
+        return false;
+      }
+    }
+    const double norm = Eigen::Quaterniond(q.w, q.x, q.y, q.z).norm();
+    if (r.use_orientation && (!std::isfinite(norm) || norm < 1e-9)) {
+      reason = "invalid reference quaternion";
+      return false;
+    }
+    const auto & first = refs.front();
+    if (r.use_position != first.use_position || r.use_orientation != first.use_orientation ||
+      r.use_linear_velocity != first.use_linear_velocity ||
+      r.use_angular_velocity != first.use_angular_velocity ||
+      r.use_individual_thrust != first.use_individual_thrust)
+    {
+      reason = "reference flags change inside the trajectory window";
+      return false;
+    }
+    if (r.use_individual_thrust &&
+      (r.individual_thrust.data.size() !=
+      static_cast<std::size_t>(controller_multirotor_params_.n_motors) ||
+      r.individual_thrust.unit_of_measurement != "N"))
+    {
+      reason = "individual thrust dimension or unit mismatch";
+      return false;
+    }
+    for (double x : r.individual_thrust.data) {
+      if (!std::isfinite(x) || x < 0.0) {
+        reason = "invalid individual thrust";
+        return false;
+      }
+    }
+    if (msg.terminal) {
+      if (euclidean_distance(p, first.pose.position) > 1e-9 ||
+        std::hypot(std::hypot(v.x, v.y), v.z) > 1e-9 ||
+        std::hypot(std::hypot(w.x, w.y), w.z) > 1e-9)
+      {
+        reason = "terminal reference must be stationary";
+        return false;
+      }
+      if (r.use_orientation) {
+        const auto & q0 = first.pose.orientation;
+        if (std::abs(
+            Eigen::Quaterniond(q.w, q.x, q.y, q.z).normalized().dot(
+              Eigen::Quaterniond(q0.w, q0.x, q0.y, q0.z).normalized())) < 1.0 - 1e-9)
+        {
+          reason = "terminal attitude must be constant";
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+laser_msgs::msg::ReferenceState ControlManagerNode::interpolate_reference(
+  const laser_msgs::msg::ReferenceState & a, const laser_msgs::msg::ReferenceState & b,
+  double alpha)
+{
+  auto r = a;
+  const auto lerp = [alpha](double x, double y) {return x + alpha * (y - x);};
+  r.pose.position.x = lerp(a.pose.position.x, b.pose.position.x);
+  r.pose.position.y = lerp(a.pose.position.y, b.pose.position.y);
+  r.pose.position.z = lerp(a.pose.position.z, b.pose.position.z);
+  r.twist.linear.x = lerp(a.twist.linear.x, b.twist.linear.x);
+  r.twist.linear.y = lerp(a.twist.linear.y, b.twist.linear.y);
+  r.twist.linear.z = lerp(a.twist.linear.z, b.twist.linear.z);
+  r.twist.angular.x = lerp(a.twist.angular.x, b.twist.angular.x);
+  r.twist.angular.y = lerp(a.twist.angular.y, b.twist.angular.y);
+  r.twist.angular.z = lerp(a.twist.angular.z, b.twist.angular.z);
+  if (r.use_orientation) {
+    const auto & qa = a.pose.orientation;
+    const auto & qb = b.pose.orientation;
+    const Eigen::Quaterniond q = Eigen::Quaterniond(qa.w, qa.x, qa.y, qa.z).normalized().slerp(
+      alpha, Eigen::Quaterniond(qb.w, qb.x, qb.y, qb.z).normalized());
+    r.pose.orientation.w = q.w();
+    r.pose.orientation.x = q.x();
+    r.pose.orientation.y = q.y();
+    r.pose.orientation.z = q.z();
+  }
+  if (r.use_individual_thrust) {
+    for (std::size_t i = 0; i < r.individual_thrust.data.size(); ++i) {
+      r.individual_thrust.data[i] = lerp(a.individual_thrust.data[i], b.individual_thrust.data[i]);
+    }
+  }
+  return r;
+}
+
+bool ControlManagerNode::sample_reference_horizon(
+  const ReferenceHorizon & msg, double elapsed,
+  std::vector<laser_msgs::msg::ReferenceState> & output) const
+{
+  const auto & refs = msg.reference_horizon;
+  const auto & times = msg.time_from_start;
+  if (elapsed < times.front() - 1e-6) {
+    return false;
+  }
+  if (msg.terminal) {
+    output.assign(
+      static_cast<std::size_t>(acados_params_.N + 1),
+      interpolate_reference(refs.front(), refs.front(), 0.0));
+    return true;
+  }
+  if (elapsed + acados_params_.N * acados_params_.dt > times.back() + 1e-9) {
+    return false;
+  }
+  output.clear();
+  output.reserve(static_cast<std::size_t>(acados_params_.N + 1));
+  for (int i = 0; i <= acados_params_.N; ++i) {
+    const double time = std::clamp(elapsed + i * acados_params_.dt, times.front(), times.back());
+    const auto upper = std::upper_bound(times.begin(), times.end(), time);
+    if (upper == times.end()) {
+      output.push_back(interpolate_reference(refs.back(), refs.back(), 0.0));
+    } else {
+      const std::size_t hi = static_cast<std::size_t>(upper - times.begin());
+      const std::size_t lo = hi - 1;
+      output.push_back(
+        interpolate_reference(
+          refs[lo], refs[hi],
+          (time - times[lo]) / (times[hi] - times[lo])));
+    }
+  }
+  return true;
+}
+
+void ControlManagerNode::latch_reference_hold()
+{
+  set_hold_reference(commanded_reference_.pose);
+  have_external_reference_ = false;
+  closed_mission_id_ = std::max(closed_mission_id_, accepted_mission_id_);
+  emergency_hover_ = true;
+  diagnostics_.have_goal = false;
+  finish_rmse_run();
+  cancel_benchmark();
+}
+
+void ControlManagerNode::publish_control_state()
+{
+  if (!received_first_odometry_msg_) {
+    return;
+  }
+  laser_msgs::msg::UavControlState msg;
+  msg.header.stamp = get_clock()->now();
+  msg.header.frame_id = reference_frame_id_;
+  msg.flight_id = flight_id_;
+  msg.mission_id = std::max(accepted_mission_id_, closed_mission_id_);
+  msg.ready_for_tracking = is_active_ && takeoff_done_ && !requested_land_ && !land_rampdown_;
+  msg.emergency_hold = emergency_hover_;
+  msg.horizon_length = static_cast<uint32_t>(acados_params_.N);
+  msg.horizon_dt = acados_params_.dt;
+  msg.reference = commanded_reference_;
+  msg.estimated_mass = estimated_mass_;
+  pub_control_state_->publish(msg);
 }
 
 void ControlManagerNode::takeoff_service_callback(
@@ -732,6 +815,9 @@ void ControlManagerNode::takeoff_service_callback(
   }
 
   requested_takeoff_ = true;
+  flight_id_ = static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
+  accepted_mission_id_ = closed_mission_id_ = 0;
+  benchmark_.last_mission_id = 0;
   cancel_benchmark();
   requested_land_ = false;
   land_done_ = false;
@@ -788,232 +874,6 @@ void ControlManagerNode::land_service_callback(
   RCLCPP_INFO(get_logger(), "Landing requested at %.2f m/s", land_speed_);
 }
 
-bool ControlManagerNode::locate_piece(
-  const std::vector<double> & durations, double relative_time,
-  std::size_t & piece_index, double & local_time)
-{
-  if (durations.empty()) {
-    return false;
-  }
-
-  double t = std::max(0.0, relative_time);
-  for (std::size_t i = 0; i < durations.size(); ++i) {
-    if (durations[i] <= 0.0) {
-      return false;
-    }
-    if (t <= durations[i]) {
-      piece_index = i;
-      local_time = t;
-      return true;
-    }
-    t -= durations[i];
-  }
-
-  piece_index = durations.size() - 1U;
-  local_time = durations.back();
-  return true;
-}
-
-double ControlManagerNode::eval_poly_desc(
-  const std::vector<double> & coefficients, std::size_t offset, std::size_t order, double t)
-{
-  // external planner/GCOPTER serializes each row as [a_n, ..., a_1, a_0].
-  double value = coefficients[offset];
-  for (std::size_t j = 1; j <= order; ++j) {
-    value = value * t + coefficients[offset + j];
-  }
-  return value;
-}
-
-double ControlManagerNode::eval_poly_derivative_desc(
-  const std::vector<double> & coefficients, std::size_t offset, std::size_t order, double t)
-{
-  if (order == 0U) {
-    return 0.0;
-  }
-
-  double value = static_cast<double>(order) * coefficients[offset];
-  for (std::size_t j = 1; j < order; ++j) {
-    const double power = static_cast<double>(order - j);
-    value = value * t + power * coefficients[offset + j];
-  }
-  return value;
-}
-
-double ControlManagerNode::trajectory_duration(const std::vector<double> & durations)
-{
-  double total = 0.0;
-  for (const double dt : durations) {
-    total += dt;
-  }
-  return total;
-}
-
-bool ControlManagerNode::sample_position(
-  const PolynomialTrajectory & traj, double absolute_ros_time, Eigen::Vector3d & position,
-  Eigen::Vector3d & velocity) const
-{
-  if ((traj.type & PolynomialTrajectory::POSITION_TRAJ) == 0U || traj.piece_num_pos == 0U) {
-    return false;
-  }
-
-  const double relative_time = absolute_ros_time - traj.start_wt_pos;
-  const double total_duration = trajectory_duration(traj.time_pos);
-
-  std::size_t piece = 0U;
-  double local_t = 0.0;
-
-  // Thin adapter semantics:
-  //   - inside [0, T]: evaluate exactly the polynomial sent by SUPER;
-  //   - before t=0: use the first polynomial state;
-  //   - after T: use the terminal polynomial state with zero velocity.
-  //
-  // No trajectory reshaping, replanning, interpolation between messages, or velocity-based
-  // orientation logic is performed here.
-  if (!locate_piece(traj.time_pos, relative_time, piece, local_t)) {
-    return false;
-  }
-
-  const std::size_t order = static_cast<std::size_t>(traj.order_pos);
-  const std::size_t stride = order + 1U;
-  const std::size_t offset = piece * stride;
-
-  position.x() = eval_poly_desc(traj.coef_pos_x, offset, order, local_t);
-  position.y() = eval_poly_desc(traj.coef_pos_y, offset, order, local_t);
-  position.z() = eval_poly_desc(traj.coef_pos_z, offset, order, local_t);
-
-  velocity.x() = eval_poly_derivative_desc(traj.coef_pos_x, offset, order, local_t);
-  velocity.y() = eval_poly_derivative_desc(traj.coef_pos_y, offset, order, local_t);
-  velocity.z() = eval_poly_derivative_desc(traj.coef_pos_z, offset, order, local_t);
-
-  if (relative_time < 0.0 || relative_time >= total_duration) {
-    velocity.setZero();
-  }
-
-  return true;
-}
-
-bool ControlManagerNode::sample_yaw(
-  const PolynomialTrajectory & traj, double absolute_ros_time, double & yaw,
-  double & yaw_rate) const
-{
-  // Use the yaw polynomial exactly as published by SUPER when present and valid.
-  if ((traj.type & PolynomialTrajectory::YAW_TRAJ) != 0U && traj.piece_num_yaw > 0U) {
-    const std::size_t order = static_cast<std::size_t>(traj.order_yaw);
-    const std::size_t stride = order + 1U;
-    const std::size_t expected = static_cast<std::size_t>(traj.piece_num_yaw) * stride;
-
-    if (traj.time_yaw.size() == traj.piece_num_yaw && traj.coef_yaw.size() == expected) {
-      const double relative_time = absolute_ros_time - traj.start_wt_yaw;
-      const double total_duration = trajectory_duration(traj.time_yaw);
-
-      std::size_t piece = 0U;
-      double local_t = 0.0;
-      if (locate_piece(traj.time_yaw, relative_time, piece, local_t)) {
-        const std::size_t offset = piece * stride;
-        yaw = normalize_heading(eval_poly_desc(traj.coef_yaw, offset, order, local_t));
-        yaw_rate = eval_poly_derivative_desc(traj.coef_yaw, offset, order, local_t);
-
-        if (relative_time < 0.0 || relative_time >= total_duration) {
-          yaw_rate = 0.0;
-        }
-
-        return true;
-      }
-    }
-  }
-
-  // If SUPER explicitly publishes a direct yaw command, use it exactly.
-  if ((traj.type & PolynomialTrajectory::YAW_COMMAND) != 0U) {
-    yaw = normalize_heading(traj.yaw);
-    yaw_rate = traj.yaw_rate;
-    return true;
-  }
-
-  // No yaw information was supplied by SUPER. Do not invent one from velocity.
-  return false;
-}
-
-bool ControlManagerNode::build_external_horizon(
-  const PolynomialTrajectory & traj, double ros_now_sec,
-  std::vector<laser_msgs::msg::ReferenceState> & horizon) const
-{
-  horizon.clear();
-  horizon.reserve(static_cast<std::size_t>(acados_params_.N + 1));
-  const double fallback_yaw = quaternion_to_heading(commanded_reference_.pose.orientation);
-
-  for (int i = 0; i <= acados_params_.N; ++i) {
-    // The only adaptation performed for NMPC is temporal sampling of SUPER's committed
-    // polynomial at the controller prediction grid.
-    const double sample_time = ros_now_sec + static_cast<double>(i) * acados_params_.dt;
-
-    Eigen::Vector3d position;
-    Eigen::Vector3d velocity;
-    if (!sample_position(traj, sample_time, position, velocity)) {
-      return false;
-    }
-
-    double yaw = 0.0;
-    double yaw_rate = 0.0;
-    const bool have_super_yaw = sample_yaw(traj, sample_time, yaw, yaw_rate);
-
-    laser_msgs::msg::ReferenceState ref;
-    ref.pose.position.x = position.x();
-    ref.pose.position.y = position.y();
-    ref.pose.position.z = position.z();
-
-    // The NMPC treats use_orientation=false as an identity yaw target.
-    ref.pose.orientation = heading_to_quaternion(have_super_yaw ? yaw : fallback_yaw);
-
-    ref.twist.linear.x = velocity.x();
-    ref.twist.linear.y = velocity.y();
-    ref.twist.linear.z = velocity.z();
-
-    ref.use_position = true;
-    ref.use_linear_velocity = true;
-    ref.use_individual_thrust = false;
-
-    ref.twist.angular.z = have_super_yaw ? yaw_rate : 0.0;
-    ref.use_orientation = true;
-    ref.use_angular_velocity = true;
-
-    horizon.push_back(ref);
-  }
-
-  return true;
-}
-
-bool ControlManagerNode::sample_external_terminal_reference(
-  const PolynomialTrajectory & traj, laser_msgs::msg::ReferenceState & ref) const
-{
-  if (traj.time_pos.empty()) {
-    return false;
-  }
-
-  const double end_time = traj.start_wt_pos + trajectory_duration(traj.time_pos);
-  Eigen::Vector3d position;
-  Eigen::Vector3d velocity;
-  if (!sample_position(traj, end_time, position, velocity)) {
-    return false;
-  }
-
-  double yaw = quaternion_to_heading(commanded_reference_.pose.orientation);
-  double yaw_rate = 0.0;
-  sample_yaw(traj, end_time, yaw, yaw_rate);
-
-  ref = laser_msgs::msg::ReferenceState();
-  ref.pose.position.x = position.x();
-  ref.pose.position.y = position.y();
-  ref.pose.position.z = position.z();
-  ref.pose.orientation = heading_to_quaternion(yaw);
-  ref.use_position = true;
-  ref.use_orientation = true;
-  ref.use_linear_velocity = true;
-  ref.use_angular_velocity = true;
-  ref.use_individual_thrust = false;
-  return true;
-}
-
 void ControlManagerNode::minimum_jerk(double tau, double & s, double & ds_dtau)
 {
   const double u = std::max(0.0, std::min(1.0, tau));
@@ -1046,10 +906,7 @@ void ControlManagerNode::start_vertical_reference(double target_z, double speed)
   vertical_time_started_ = false;
   set_hold_reference(vertical_start_reference_.pose);
   hold_reference_.pose.position.z = target_z;
-  have_external_position_trajectory_ = false;
-  have_external_rx_time_ = false;
-  external_emergency_stop_ = false;
-  stale_hold_active_ = false;
+  have_external_reference_ = false;
 }
 
 void ControlManagerNode::build_vertical_horizon(
@@ -1076,11 +933,6 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
   if (!is_active_ || lock_control_inputs_ || !received_first_odometry_msg_) {
     return false;
   }
-  if (external_emergency_stop_ && !emergency_hover_) {
-    set_hold_reference(commanded_reference_.pose);
-    emergency_hover_ = true;
-  }
-
   if (emergency_hover_) {
     build_hold_horizon(hold_reference_, current_horizon_path_);
   } else if (requested_takeoff_ || requested_land_) {
@@ -1090,57 +942,31 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
     }
     build_vertical_horizon(now, current_horizon_path_);
   } else if (takeoff_done_) {
-    const bool ended = have_external_position_trajectory_ &&
-      now.seconds() >= latest_external_trajectory_.start_wt_pos +
-      trajectory_duration(latest_external_trajectory_.time_pos);
-    const double age = have_external_rx_time_ ?
-      std::chrono::duration<double>(
-      std::chrono::steady_clock::now() - last_external_rx_steady_).count() :
-      std::numeric_limits<double>::infinity();
-    if (ended) {
-      if (!sample_external_terminal_reference(latest_external_trajectory_, hold_reference_)) {
-        return false;
-      }
-      build_hold_horizon(hold_reference_, current_horizon_path_);
-      if (external_goal_reached(hold_reference_)) {
-        have_external_position_trajectory_ = false;
-        diagnostics_.have_goal = false;
-        finish_rmse_run();
-      } else {
-        diagnostics_.have_goal = true;
-        start_rmse_run_if_needed();
-      }
-    } else if (have_external_position_trajectory_ && age <= external_timeout_sec_) {
-      if (!build_external_horizon(
-          latest_external_trajectory_, now.seconds(),
-          current_horizon_path_))
+    if (have_external_reference_) {
+      const double age = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - last_reference_rx_).count();
+      const double elapsed = (now - rclcpp::Time(latest_reference_.start_time)).seconds();
+      if ((!latest_reference_.terminal && age > reference_timeout_sec_) ||
+        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_))
       {
-        return false;
-      }
-      stale_hold_active_ = false;
-      start_rmse_run_if_needed();
-      diagnostics_.have_goal = true;
-    } else {
-      if (have_external_position_trajectory_) {
-        if (!hold_on_stale_) {
-          RCLCPP_ERROR_THROTTLE(
-            get_logger(), *get_clock(), 2000, "External trajectory stale; output suppressed");
-          return false;
-        }
-        if (!stale_hold_active_) {
-          set_hold_reference(commanded_reference_.pose);
-          stale_hold_active_ = true;
-          diagnostics_.have_goal = false;
+        latch_reference_hold();
+        build_hold_horizon(hold_reference_, current_horizon_path_);
+      } else {
+        hold_reference_ = current_horizon_path_.front();
+        diagnostics_.have_goal = !latest_reference_.terminal ||
+          !external_goal_reached(current_horizon_path_.front());
+        if (diagnostics_.have_goal) {
+          start_rmse_run_if_needed();
+        } else {
           finish_rmse_run();
-          RCLCPP_WARN(get_logger(), "External trajectory stale; holding last commanded reference");
         }
       }
+    } else {
       build_hold_horizon(hold_reference_, current_horizon_path_);
     }
   } else {
     return false;
   }
-
   check_safe_area();
   if (emergency_hover_) {
     build_hold_horizon(hold_reference_, current_horizon_path_);
@@ -1489,6 +1315,7 @@ void ControlManagerNode::diagnostics_timer_callback()
   if (!is_active_) {
     return;
   }
+  publish_control_state();
   update_benchmark(get_clock()->now());
 
   if (calculate_rmse_) {
@@ -1505,25 +1332,55 @@ void ControlManagerNode::diagnostics_timer_callback()
   pub_diagnostics_->publish(diagnostics_);
 }
 
-void ControlManagerNode::benchmark_goal_callback(const geometry_msgs::msg::PoseStamped &)
+void ControlManagerNode::planning_diagnostics_callback(const PlanningDiagnostics & msg)
 {
-  if (!is_active_ || !benchmark_.enabled || !received_first_odometry_msg_ ||
-    !takeoff_done_ || requested_takeoff_ || requested_land_)
+  if (!is_active_ || msg.flight_id != flight_id_ || msg.mission_id == 0 ||
+    msg.header.frame_id != reference_frame_id_ || msg.header.stamp.sec < 0 ||
+    msg.header.stamp.nanosec >= 1000000000U || msg.start_time.sec < 0 ||
+    msg.start_time.nanosec >= 1000000000U || msg.waypoint_count == 0 ||
+    !std::isfinite(msg.goal.position.x) || !std::isfinite(msg.goal.position.y) ||
+    !std::isfinite(msg.goal.position.z) || !std::isfinite(msg.goal.heading))
   {
     return;
   }
-  cancel_benchmark();
-  benchmark_.active = true;
-  ++benchmark_.run_id;
-  benchmark_.start_time = get_clock()->now();
-  const auto & p = odometry_.pose.pose.position;
-  benchmark_.start_position = Eigen::Vector3d(p.x, p.y, p.z);
-  benchmark_.last_position = benchmark_.start_position;
-  benchmark_.distance = 0.0;
-  benchmark_.have_trajectory = false;
-  benchmark_.have_heartbeat = false;
-  RCLCPP_INFO(
-    get_logger(), "BENCHMARK START | run=%lu", static_cast<unsigned long>(benchmark_.run_id));
+  if (msg.state == PlanningDiagnostics::ABORTED || msg.state == PlanningDiagnostics::FAILED) {
+    closed_mission_id_ = std::max(closed_mission_id_, msg.mission_id);
+    if (msg.mission_id == accepted_mission_id_ && takeoff_done_) {
+      latch_reference_hold();
+    }
+    if (benchmark_.active && benchmark_.mission_id == msg.mission_id) {
+      cancel_benchmark();
+    }
+    return;
+  }
+  if (msg.mission_id <= closed_mission_id_ || !takeoff_done_ || requested_land_ ||
+    msg.header.frame_id != reference_frame_id_)
+  {
+    return;
+  }
+  if ((msg.state == PlanningDiagnostics::GENERATING ||
+    msg.state == PlanningDiagnostics::TRACKING) &&
+    benchmark_.enabled && msg.mission_id > benchmark_.last_mission_id)
+  {
+    cancel_benchmark();
+    benchmark_.last_mission_id = msg.mission_id;
+    benchmark_.mission_id = msg.mission_id;
+    benchmark_.active = true;
+    benchmark_.completed = false;
+    ++benchmark_.run_id;
+    benchmark_.waypoint_count = msg.waypoint_count;
+    benchmark_.goal = msg.goal;
+    benchmark_.start_time = rclcpp::Time(msg.start_time);
+    const auto & p = odometry_.pose.pose.position;
+    benchmark_.start_position = Eigen::Vector3d(p.x, p.y, p.z);
+    benchmark_.last_position = benchmark_.start_position;
+    benchmark_.distance = 0.0;
+  }
+  if (msg.state == PlanningDiagnostics::COMPLETED && benchmark_.active &&
+    msg.mission_id == benchmark_.mission_id)
+  {
+    benchmark_.completed = true;
+  }
 }
 
 void ControlManagerNode::cancel_benchmark()
@@ -1537,24 +1394,13 @@ void ControlManagerNode::cancel_benchmark()
 
 void ControlManagerNode::update_benchmark(const rclcpp::Time & now)
 {
-  if (!benchmark_.active || !benchmark_.have_trajectory || !benchmark_.have_heartbeat ||
-    !takeoff_done_ || requested_land_ || now.seconds() < benchmark_.trajectory_end)
-  {
+  if (!benchmark_.active || !benchmark_.completed || !takeoff_done_ || requested_land_) {
     return;
   }
-  const double heartbeat_age = std::chrono::duration<double>(
-    std::chrono::steady_clock::now() - benchmark_.last_heartbeat).count();
-  if (heartbeat_age <= benchmark_.heartbeat_timeout ||
-    euclidean_distance(odometry_.pose.pose.position, benchmark_.terminal.pose.position) >=
-    goal_position_tolerance_)
-  {
-    return;
-  }
-  if (benchmark_.require_heading && std::abs(
-      heading_error(
-        quaternion_to_heading(odometry_.pose.pose.orientation),
-        quaternion_to_heading(benchmark_.terminal.pose.orientation))) >= goal_heading_tolerance_)
-  {
+  laser_msgs::msg::ReferenceState goal;
+  goal.pose.position = benchmark_.goal.position;
+  goal.pose.orientation = heading_to_quaternion(benchmark_.goal.heading);
+  if (!external_goal_reached(goal)) {
     return;
   }
 
@@ -1563,8 +1409,9 @@ void ControlManagerNode::update_benchmark(const rclcpp::Time & now)
   benchmark_.active = false;
   RCLCPP_INFO(
     get_logger(), "BENCHMARK RESULT | run=%lu | average_speed=%.4f m/s | distance=%.4f m | "
-    "total_time=%.4f s | waypoints=1",
-    static_cast<unsigned long>(benchmark_.run_id), speed, benchmark_.distance, duration);
+    "total_time=%.4f s | waypoints=%u",
+    static_cast<unsigned long>(benchmark_.run_id), speed, benchmark_.distance, duration,
+    benchmark_.waypoint_count);
   if (benchmark_.csv_path.empty()) {
     return;
   }
@@ -1580,7 +1427,7 @@ void ControlManagerNode::update_benchmark(const rclcpp::Time & now)
   const auto & p = odometry_.pose.pose.position;
   output << benchmark_.run_id << ',' << std::fixed << std::setprecision(6)
          << benchmark_.start_time.seconds() << ',' << now.seconds() << ',' << duration << ','
-         << benchmark_.distance << ',' << speed << ",1,"
+         << benchmark_.distance << ',' << speed << ',' << benchmark_.waypoint_count << ','
          << benchmark_.start_position.x() << ',' << benchmark_.start_position.y() << ','
          << benchmark_.start_position.z() << ',' << p.x << ',' << p.y << ',' << p.z << '\n';
   output.flush();
