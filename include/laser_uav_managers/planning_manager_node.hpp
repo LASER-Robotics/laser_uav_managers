@@ -24,7 +24,7 @@
 
 #include <laser_msgs/msg/reference_horizon.hpp>
 #include <mars_quadrotor_msgs/msg/polynomial_trajectory.hpp>
-#include <laser_uav_planners/agile_planner.hpp>
+#include <pmm_planner/pmm_planner.hpp>
 
 namespace laser_uav_managers
 {
@@ -113,8 +113,8 @@ private:
   SteadyClock::time_point odometry_rx_{};
   rclcpp::Time plan_start_{0, 0, RCL_ROS_TIME};
 
-  laser_uav_planners::multirotor_t physical_;
-  laser_uav_planners::pmm_t pmm_parameters_;
+  pmm_planner::multirotor_t physical_;
+  pmm_planner::pmm_t pmm_parameters_;
   std::string planner_;
   double publish_rate_{100.0};
   double state_timeout_{0.5};

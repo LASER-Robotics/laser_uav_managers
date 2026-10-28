@@ -350,13 +350,13 @@ PlanningManagerNode::PlanningManagerNode(const rclcpp::NodeOptions & options)
       {"second_vel_opt.alpha_reduction_factor", 0.1}, {"second_vel_opt.alpha_min_threshold", 0.01},
       {"time.dt_precision", 0.001}, {"time.sampling_step", 0.01}})
   {
-    declare_parameter("agile_planner." + entry.first, entry.second);
+    declare_parameter("pmm_planner." + entry.first, entry.second);
   }
-  declare_parameter("agile_planner.ltd_opt.use_drag", false);
-  declare_parameter("agile_planner.ltd_opt.thrust_decomp_max_iter", 20);
-  declare_parameter("agile_planner.first_vel_opt.max_iter", 30);
-  declare_parameter("agile_planner.second_vel_opt.run", true);
-  declare_parameter("agile_planner.second_vel_opt.max_iter", 10);
+  declare_parameter("pmm_planner.ltd_opt.use_drag", false);
+  declare_parameter("pmm_planner.ltd_opt.thrust_decomp_max_iter", 20);
+  declare_parameter("pmm_planner.first_vel_opt.max_iter", 30);
+  declare_parameter("pmm_planner.second_vel_opt.run", true);
+  declare_parameter("pmm_planner.second_vel_opt.max_iter", 10);
 }
 
 void PlanningManagerNode::read_parameters()
@@ -408,37 +408,37 @@ void PlanningManagerNode::read_parameters()
   {
     throw std::invalid_argument("PMM requires an invertible four-motor allocation");
   }
-  get_parameter("agile_planner.multirotor_parameters.max_accel", pmm_parameters_.max_accel_norm);
-  get_parameter("agile_planner.multirotor_parameters.max_vel", pmm_parameters_.max_vel_norm);
+  get_parameter("pmm_planner.multirotor_parameters.max_accel", pmm_parameters_.max_accel_norm);
+  get_parameter("pmm_planner.multirotor_parameters.max_vel", pmm_parameters_.max_vel_norm);
   get_parameter(
-    "agile_planner.multirotor_parameters.default_vel",
+    "pmm_planner.multirotor_parameters.default_vel",
     pmm_parameters_.default_vel_norm);
-  get_parameter("agile_planner.ltd_opt.use_drag", pmm_parameters_.use_drag);
+  get_parameter("pmm_planner.ltd_opt.use_drag", pmm_parameters_.use_drag);
   get_parameter(
-    "agile_planner.ltd_opt.thrust_decomp_acc_precision",
+    "pmm_planner.ltd_opt.thrust_decomp_acc_precision",
     pmm_parameters_.thrust_decomp_acc_precision);
   get_parameter(
-    "agile_planner.ltd_opt.thrust_decomp_max_iter",
+    "pmm_planner.ltd_opt.thrust_decomp_max_iter",
     pmm_parameters_.thrust_decomp_max_iter);
-  get_parameter("agile_planner.first_vel_opt.alpha", pmm_parameters_.first_run_alpha);
+  get_parameter("pmm_planner.first_vel_opt.alpha", pmm_parameters_.first_run_alpha);
   get_parameter(
-    "agile_planner.first_vel_opt.alpha_reduction_factor",
+    "pmm_planner.first_vel_opt.alpha_reduction_factor",
     pmm_parameters_.first_run_alpha_reduction_factor);
   get_parameter(
-    "agile_planner.first_vel_opt.alpha_min_threshold",
+    "pmm_planner.first_vel_opt.alpha_min_threshold",
     pmm_parameters_.first_run_alpha_min_threshold);
-  get_parameter("agile_planner.first_vel_opt.max_iter", pmm_parameters_.first_run_max_iter);
-  get_parameter("agile_planner.second_vel_opt.run", pmm_parameters_.run_second_opt);
-  get_parameter("agile_planner.second_vel_opt.alpha", pmm_parameters_.second_run_alpha);
+  get_parameter("pmm_planner.first_vel_opt.max_iter", pmm_parameters_.first_run_max_iter);
+  get_parameter("pmm_planner.second_vel_opt.run", pmm_parameters_.run_second_opt);
+  get_parameter("pmm_planner.second_vel_opt.alpha", pmm_parameters_.second_run_alpha);
   get_parameter(
-    "agile_planner.second_vel_opt.alpha_reduction_factor",
+    "pmm_planner.second_vel_opt.alpha_reduction_factor",
     pmm_parameters_.second_run_alpha_reduction_factor);
   get_parameter(
-    "agile_planner.second_vel_opt.alpha_min_threshold",
+    "pmm_planner.second_vel_opt.alpha_min_threshold",
     pmm_parameters_.second_run_alpha_min_threshold);
-  get_parameter("agile_planner.second_vel_opt.max_iter", pmm_parameters_.second_run_max_iter);
-  get_parameter("agile_planner.time.dt_precision", pmm_parameters_.dt_precision);
-  get_parameter("agile_planner.time.sampling_step", pmm_parameters_.sampling_step);
+  get_parameter("pmm_planner.second_vel_opt.max_iter", pmm_parameters_.second_run_max_iter);
+  get_parameter("pmm_planner.time.dt_precision", pmm_parameters_.dt_precision);
+  get_parameter("pmm_planner.time.sampling_step", pmm_parameters_.sampling_step);
   for (double value : {pmm_parameters_.max_accel_norm, pmm_parameters_.max_vel_norm,
       pmm_parameters_.default_vel_norm, pmm_parameters_.sampling_step, pmm_parameters_.dt_precision,
       pmm_parameters_.thrust_decomp_acc_precision, pmm_parameters_.first_run_alpha,
@@ -799,7 +799,7 @@ void PlanningManagerNode::start_segment()
             result.states.push_back(ref);
           }
         } else {
-          laser_uav_planners::AgilePlanner planner(physical, parameters);
+          pmm_planner::PmmPlanner planner(physical, parameters);
           if (stop || goals.size() == 1) {
             planner.generateTrajectory(start, goal, static_cast<float>(speed), speed > 0.0);
           } else {
@@ -972,6 +972,10 @@ void PlanningManagerNode::timer_callback()
     if (first != times.begin()) {
       --first;
     }
+    segment_terminal = elapsed >= times.back();
+    if (segment_terminal) {
+      first = times.end() - 1;
+    }
     auto last = std::lower_bound(first, times.end(), elapsed + coverage);
     if (last != times.end()) {
       ++last;
@@ -980,7 +984,6 @@ void PlanningManagerNode::timer_callback()
       output.time_from_start.push_back(*it);
       output.reference_horizon.push_back(states[static_cast<std::size_t>(it - times.begin())]);
     }
-    segment_terminal = elapsed >= times.back();
     if (output.time_from_start.back() < elapsed + coverage) {
       output.time_from_start.push_back(elapsed + coverage);
       auto terminal = states.back();
@@ -996,9 +999,14 @@ void PlanningManagerNode::timer_callback()
         abort_mission("SUPER heartbeat timeout");
         return;
       }
-      const double origin = std::floor(now.seconds() / super_sampling_step_) * super_sampling_step_;
+      double origin = std::floor(
+        (now.seconds() - control_->horizon_dt) / super_sampling_step_) * super_sampling_step_;
+      if (now.seconds() >= super_end_time()) {
+        origin = std::max(origin, super_end_time());
+      }
       output.start_time = rclcpp::Time(static_cast<int64_t>(origin * 1e9), RCL_ROS_TIME);
-      const double sample_count = std::ceil(coverage / super_sampling_step_) + 2;
+      const double sample_count =
+        std::ceil((now.seconds() + coverage - origin) / super_sampling_step_) + 1;
       if (!std::isfinite(sample_count) || sample_count > 65536) {
         abort_mission("SUPER sample window exceeds the message limit", Status::FAILED);
         return;

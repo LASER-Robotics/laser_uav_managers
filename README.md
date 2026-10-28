@@ -34,7 +34,7 @@ The artificial `<uav>/cm_odometry_debug -> <uav>/fcu` TF remains available.
 | Control | `planning_diagnostics_in` | Native mission events and CSV metadata |
 | Control | `control_state_out` | `laser_msgs/UavControlState`; readiness, flight ID, N/dt, commanded state, calibrated mass |
 | Control | `diagnostics_out` | Existing `laser_msgs/UavControlDiagnostics` |
-| Control | `reference_horizon_out` | `nav_msgs/Path`; debug output only |
+| Control | `reference_path_out` | `nav_msgs/Path`; debug output only |
 | Control | `attitude_rates_thrust_out`, `motor_speed_reference_out` | Existing hardware commands |
 | Control | `takeoff`, `land` | `std_srvs/Trigger`; local maneuvers |
 | Planning | `goto_in`, `goto_relative_in` | `laser_msgs/PoseWithHeading` |
@@ -90,7 +90,7 @@ Build the native stack and its planner dependencies on `dev/separate_planning_an
 
 ```bash
 colcon build --packages-up-to laser_uav_managers laser_uav_tui \
-  --allow-overriding laser_msgs laser_uav_planners laser_uav_managers
+  --allow-overriding laser_msgs pmm_planner laser_uav_managers
 source install/setup.bash
 ```
 
@@ -154,8 +154,9 @@ in `laser_uav_controllers`, without another solver copy in planning.
 The default cloud input is `/<uav>/fast_lio/cloud_registered`, matching LASER
 FAST-LIO. Use `cloud_topic:=...` when using another point-cloud source.
 
-SUPER requires its integration branch and the separate
-[LASER ROG-Map](https://github.com/LASER-Robotics/rog_map) package. The SUPER checkout
+SUPER requires the LASER integration and the separate
+[LASER ROG-Map](https://github.com/LASER-Robotics/rog_map) package, provided by the
+`laser_uav_mappings` gitman collection. The SUPER checkout
 must also provide its `mars_quadrotor_msgs` package. Its ROS interface
 publishes the configured `reference_frame_id` and propagates `EMER_STOP` in the
 heartbeat. ROG-Map transforms the input cloud into the **actual odometry frame**
@@ -172,7 +173,11 @@ fly-through requests are rejected. A valid `goto`, `goto_relative` or
 from the commanded position and velocity and keep publishing the previous plan
 until the replacement is ready. If a calculation is still running, only the
 latest request is retained; the previous result cannot replace it. SUPER also
-keeps its committed trajectory until the new one arrives. Backend switching
+keeps its committed trajectory until the new one arrives, even when the previous
+route is already fully planned. Requests do not queue missions: the newest valid
+request replaces the previous goal or waypoint list, including during generation
+or a waypoint hold. Control readiness, safety gates and backend limits still apply.
+Backend switching
 remains unsupported.
 SUPER uses its startup velocity limits; its waypoint requests require `speed=0`.
 MINCO and PMM accept a per-mission speed override. MINCO rejects a requested speed
@@ -183,7 +188,7 @@ duration, MINCO/PMM sample count or SUPER piece count, and calculation time. Way
 holds, completion, cancellation and failures are logged as events; reference
 publications and SUPER heartbeats do not produce an INFO log every cycle.
 
-The `AgilePlanner` C++ API intentionally changed. Experimental
+The `PmmPlanner` C++ API intentionally changed. Experimental
 `carrara_uav_managers` callers of its old constructor, `getTrajectory(N, time)`
 and `isHover()` have not been migrated; the package selection above builds the
 native LASER stack only. No compatibility wrappers were added.

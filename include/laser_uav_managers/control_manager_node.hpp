@@ -116,7 +116,7 @@ private:
   void internal_loop_timer_callback();
   void diagnostics_timer_callback();
 
-  // Local reference generation (no AgilePlanner)
+  // Local reference generation
   void build_hold_horizon(
     const laser_msgs::msg::ReferenceState & hold,
     std::vector<laser_msgs::msg::ReferenceState> & horizon) const;
@@ -171,7 +171,7 @@ private:
   rclcpp::TimerBase::SharedPtr tmr_internal_loop_control_;
   rclcpp::TimerBase::SharedPtr tmr_diagnostics_;
 
-  // Controllers (AgilePlanner/PMM intentionally absent)
+  // Controllers
   laser_uav_controllers::multirotor_t controller_multirotor_params_;
   laser_uav_controllers::acados_t acados_params_;
   laser_uav_controllers::NmpcController nmpc_controller_;

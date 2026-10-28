@@ -107,7 +107,7 @@ def generate_launch_description():
              LaunchConfiguration('planning_diagnostics_topic')),
             ('/' + uav_name + '/control_state_out',
              '/' + uav_name + '/control_manager/state'),
-            ('/' + uav_name + '/reference_horizon_out',
+            ('/' + uav_name + '/reference_path_out',
              '/' + uav_name + '/control_manager/reference_path'),
             ('/' + uav_name + '/takeoff', '/' + uav_name + '/control_manager/takeoff'),
             ('/' + uav_name + '/land', '/' + uav_name + '/control_manager/land'),

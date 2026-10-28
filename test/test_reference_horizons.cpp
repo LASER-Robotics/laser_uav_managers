@@ -89,6 +89,7 @@ struct ControlManagerNodeTestAccess
     node.last_reference_rx_ = std::chrono::steady_clock::now() - std::chrono::seconds(10);
   }
   static bool has_external(const ControlManagerNode & node) {return node.have_external_reference_;}
+  static bool rmse_active(const ControlManagerNode & node) {return node.rmse_run_active_;}
   static bool validate(ControlManagerNode & node, const Window & msg)
   {
     std::string reason;
@@ -141,7 +142,8 @@ struct PlanningManagerNodeTestAccess
       node.on_activate(
         rclcpp_lifecycle::State()), PlanningManagerNode::CallbackReturn::SUCCESS);
   }
-  static void ready(PlanningManagerNode & node, uint64_t flight, double x = 1.0)
+  static void ready(
+    PlanningManagerNode & node, uint64_t flight, double x = 1.0, double velocity = 0.0)
   {
     laser_msgs::msg::UavControlState state;
     state.header.frame_id = "map";
@@ -154,11 +156,48 @@ struct PlanningManagerNodeTestAccess
     state.reference.pose.position.y = -2.0;
     state.reference.pose.position.z = 1.5;
     state.reference.pose.orientation.w = 1.0;
+    state.reference.twist.linear.x = velocity;
+    state.reference.use_position = state.reference.use_orientation = true;
+    state.reference.use_linear_velocity = state.reference.use_angular_velocity = true;
     node.control_state_callback(state);
     nav_msgs::msg::Odometry odom;
     odom.header.frame_id = "map";
     odom.pose.pose = state.reference.pose;
+    odom.twist.twist = state.reference.twist;
     node.odometry_callback(odom);
+  }
+  static void feedback(PlanningManagerNode & node, double x)
+  {
+    auto odom = *node.odometry_;
+    odom.pose.pose.position.x = x;
+    node.odometry_callback(odom);
+  }
+  static void goto_goal(PlanningManagerNode & node, double x, bool relative = false)
+  {
+    laser_msgs::msg::PoseWithHeading goal;
+    goal.position.x = x;
+    if (relative) {
+      node.goto_relative_callback(goal);
+    } else {
+      goal.position.y = -2.0;
+      goal.position.z = 1.5;
+      node.goto_callback(goal);
+    }
+  }
+  static const Horizon & refs(const PlanningManagerNode & node) {return node.plan_->states;}
+  static uint64_t mission(const PlanningManagerNode & node) {return node.mission_.id;}
+  static auto delayed_worker(PlanningManagerNode & node)
+  {
+    std::promise<PlanningManagerNode::GeneratedPlan> result;
+    node.generation_ = result.get_future();
+    node.generation_mission_id_ = node.mission_.id;
+    return result;
+  }
+  static auto minco(
+    const laser_msgs::msg::ReferenceState & start,
+    const std::vector<laser_msgs::msg::PoseWithHeading> & goals)
+  {
+    return PlanningManagerNode::generate_minco(start, goals, 2.0, 2.0, 0.01, 1.0);
   }
   static bool goal(
     PlanningManagerNode & node, double x, bool stop = false, bool multiple = false,
@@ -215,7 +254,7 @@ struct PlanningManagerNodeTestAccess
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (node.generation_.valid() && std::chrono::steady_clock::now() < deadline) {
       node.control_rx_ = node.odometry_rx_ = PlanningManagerNode::SteadyClock::now();
-      node.poll_generation();
+      node.timer_callback();
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     ASSERT_FALSE(node.generation_.valid());
@@ -499,7 +538,44 @@ TEST_F(ReferenceHorizonsTest, ExternalWindowsCannotInterruptTakeoffOrLanding)
   ASSERT_TRUE(Access::request(*node, true));
   Access::receive(*node, window(2));
   EXPECT_FALSE(Access::has_external(*node));
-  EXPECT_EQ(Access::tick(*node, 123.0).front().pose, tracked.front().pose);
+  const auto landing = Access::tick(*node, 123.0).front().pose;
+  EXPECT_EQ(landing.position, tracked.front().pose.position);
+  const auto & q = tracked.front().pose.orientation;
+  const auto & actual = landing.orientation;
+  EXPECT_NEAR(
+    Eigen::Quaterniond(actual.w, actual.x, actual.y, actual.z).angularDistance(
+      Eigen::Quaterniond(q.w, q.x, q.y, q.z)), 0.0, 1e-12);
+}
+
+TEST_F(ReferenceHorizonsTest, PublicationStampAllowsOneControlCycleOfClockSkew)
+{
+  hover();
+  auto msg = window();
+  msg.header.stamp.nanosec = 5000000;
+  Access::receive(*node, msg);
+  EXPECT_TRUE(Access::has_external(*node));
+  msg = window(2);
+  msg.header.stamp.nanosec = 20000000;
+  for (auto & ref : msg.reference_horizon) {
+    ref.pose.position.x += 20.0;
+  }
+  Access::receive(*node, msg);
+  EXPECT_NEAR(Access::tick(*node, 121.0).front().pose.position.x, 1.5, 1e-9);
+}
+
+TEST_F(ReferenceHorizonsTest, FutureTrajectoryWaitsForCoverageWithoutClosingCurrentMission)
+{
+  hover();
+  Access::receive(*node, window());
+  const auto before = Access::tick(*node, 120.0);
+  auto next = window(2);
+  next.header.stamp.nanosec = next.start_time.nanosec = 5000000;
+  next.reference_horizon.front().pose.position.x = 10.0;
+  Access::receive(*node, next);
+  EXPECT_EQ(Access::tick(*node, 120.0), before);
+  set_time(*node, 120.005);
+  Access::receive(*node, next);
+  EXPECT_DOUBLE_EQ(Access::tick(*node, 120.005).front().pose.position.x, 10.0);
 }
 
 TEST_F(ReferenceHorizonsTest, AbortHoldsCommandAndRejectsDelayedMissionWindows)
@@ -513,6 +589,29 @@ TEST_F(ReferenceHorizonsTest, AbortHoldsCommandAndRejectsDelayedMissionWindows)
   EXPECT_EQ(Access::tick(*node, 122.0).front().pose, tracked.front().pose);
   Access::receive(*node, window(2));
   EXPECT_DOUBLE_EQ(Access::tick(*node, 123.0).front().pose.position.x, 2.5);
+}
+
+TEST_F(ReferenceHorizonsTest, FailedReplacementImmediatelyHoldsTheCurrentMission)
+{
+  hover();
+  Access::receive(*node, window());
+  const auto tracked = Access::tick(*node, 121.0);
+  Access::status(*node, status(Status::FAILED, 2));
+  EXPECT_FALSE(Access::has_external(*node));
+  Access::receive(*node, window());
+  EXPECT_EQ(Access::tick(*node, 122.0).front().pose, tracked.front().pose);
+}
+
+TEST_F(ReferenceHorizonsTest, ReplacementStartsANewTrackingMetricsRun)
+{
+  hover();
+  Access::receive(*node, window());
+  Access::tick(*node, 120.0);
+  ASSERT_TRUE(Access::rmse_active(*node));
+  Access::receive(*node, window(2));
+  EXPECT_FALSE(Access::rmse_active(*node));
+  Access::tick(*node, 120.0);
+  EXPECT_TRUE(Access::rmse_active(*node));
 }
 
 TEST_F(ReferenceHorizonsTest, BenchmarkAppendsThirteenColumnCsvOnceOnMissionCompletion)
@@ -577,6 +676,94 @@ TEST_F(ReferenceHorizonsTest, CancelledWorkerCannotInstallItsOldResult)
   EXPECT_FALSE(Planning::has_plan(*planning));
 }
 
+TEST_F(ReferenceHorizonsTest, PmmGotoReplacesFlyThroughFromCommandedPositionAndVelocity)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 8.0, false, true, 6.0));
+  Planning::wait(*planning);
+  const auto old = planning_tick();
+  Planning::ready(*planning, Access::flight(*node), 2.0, 6.0);
+  Planning::feedback(*planning, 30.0);
+  Planning::goto_goal(*planning, -2.0);
+  ASSERT_GT(Planning::mission(*planning), old.mission_id);
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  const auto & refs = Planning::refs(*planning);
+  ASSERT_GE(refs.size(), 2U);
+  EXPECT_NEAR(refs.front().pose.position.x, 2.0, 1e-8);
+  EXPECT_NEAR(refs.front().twist.linear.x, 6.0, 1e-8);
+  EXPECT_NEAR(refs.back().pose.position.x, -2.0, 1e-8);
+  EXPECT_DOUBLE_EQ(refs.back().twist.linear.x, 0.0);
+}
+
+TEST_F(ReferenceHorizonsTest, LatestGotoWaitsForOldWorkerAndKeepsStreamingOldPlan)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  const auto old = planning_tick();
+  auto worker = Planning::delayed_worker(*planning);
+  Planning::goto_goal(*planning, 4.0);
+  Planning::goto_goal(*planning, 5.0);
+  EXPECT_EQ(planning_tick().mission_id, old.mission_id);
+  EXPECT_EQ(Planning::state(*planning), Status::GENERATING);
+  worker.set_exception(std::make_exception_ptr(std::runtime_error("superseded worker")));
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, 5.0, 1e-8);
+  EXPECT_GT(planning_tick().mission_id, old.mission_id);
+}
+
+TEST_F(ReferenceHorizonsTest, RelativeGotoReplacesMissionAndInvalidGoalLeavesItRunning)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 8.0));
+  Planning::wait(*planning);
+  const auto id = Planning::mission(*planning);
+  Planning::goto_goal(*planning, std::numeric_limits<double>::quiet_NaN());
+  EXPECT_EQ(Planning::mission(*planning), id);
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+  Planning::ready(*planning, Access::flight(*node), 2.0, 0.5);
+  Planning::goto_goal(*planning, 1.0, true);
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, 3.0, 1e-8);
+}
+
+TEST_F(ReferenceHorizonsTest, SuccessfulSupersededWorkerCannotInstallItsOldResult)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  auto worker = Planning::delayed_worker(*planning);
+  Planning::goto_goal(*planning, 5.0);
+  worker.set_value({});
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, 5.0, 1e-8);
+}
+
+TEST_F(ReferenceHorizonsTest, PmmWindowsKeepTheirGenerationEpochAndCoverClockSkew)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 8.0));
+  set_time(*planning, 120.065);
+  Planning::wait(*planning);
+  const auto raw = planning_tick();
+  EXPECT_EQ(rclcpp::Time(raw.start_time).nanoseconds(), rclcpp::Time(120, 0, RCL_ROS_TIME).nanoseconds());
+  EXPECT_LE(raw.time_from_start.front(), 0.015);
+  set_time(*node, 120.06);
+  Access::receive(*node, raw);
+  EXPECT_TRUE(Access::has_external(*node));
+  EXPECT_EQ(Access::tick(*node, 120.06).size(), 21U);
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
 TEST_F(ReferenceHorizonsTest, PmmStopsAtEachWaypointAndCompletesTheWholeMission)
 {
   hover();
@@ -621,6 +808,167 @@ TEST_F(ReferenceHorizonsTest, SuperWaitingHoldDoesNotFollowUpdatedControlReferen
   const auto held = planning_tick();
   ASSERT_EQ(held.reference_horizon.size(), 2U);
   EXPECT_DOUBLE_EQ(held.reference_horizon.front().pose.position.x, 1.0);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoMatchesTheMinimumSnapSepticAndRespectsLimits)
+{
+  auto start = window().reference_horizon.front();
+  start.twist = geometry_msgs::msg::Twist();
+  laser_msgs::msg::PoseWithHeading goal;
+  goal.position = start.pose.position;
+  goal.position.x = 3.0;
+  goal.heading = 0.7;
+  const auto plan = Planning::minco(start, {goal});
+  ASSERT_GT(plan.states.size(), 2U);
+  const double duration = plan.times.back();
+  for (std::size_t i = 0; i < plan.states.size(); ++i) {
+    const double u = plan.times[i] / duration;
+    const double blend = std::pow(u, 4) * (35.0 + u * (-84.0 + u * (70.0 - 20.0 * u)));
+    EXPECT_NEAR(plan.states[i].pose.position.x, 1.0 + 2.0 * blend, 1e-9);
+    EXPECT_LE(std::abs(plan.states[i].twist.linear.x), 2.0 + 1e-5);
+    if (i > 0) {
+      const double dt = plan.times[i] - plan.times[i - 1];
+      ASSERT_GT(dt, 0.0);
+      EXPECT_LE(std::abs(plan.states[i].twist.linear.x -
+          plan.states[i - 1].twist.linear.x) / dt, 2.0 + 1e-5);
+    }
+  }
+  EXPECT_NEAR(plan.states.front().twist.linear.x, 0.0, 1e-9);
+  EXPECT_NEAR(plan.states.back().twist.linear.x, 0.0, 1e-9);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoFlyThroughPassesTheWaypointWithoutStoppingAndControlResamples)
+{
+  hover();
+  planner("minco");
+  ASSERT_TRUE(Planning::goal(*planning, 2.0, false, true, 0.7));
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  const auto & refs = Planning::refs(*planning);
+  const auto middle = std::min_element(refs.begin(), refs.end(), [](const auto & a, const auto & b) {
+        return std::abs(a.pose.position.x - 2.0) < std::abs(b.pose.position.x - 2.0);
+      });
+  ASSERT_NE(middle, refs.end());
+  EXPECT_NEAR(middle->pose.position.x, 2.0, 1e-8);
+  EXPECT_GT(middle->twist.linear.x, 0.1);
+  EXPECT_NEAR(refs.back().pose.position.x, 3.0, 1e-8);
+  Access::receive(*node, planning_tick());
+  EXPECT_EQ(Access::tick(*node, 120.0).size(), 21U);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoMultiplePiecesRecoverTheGlobalMinimumSnapSolution)
+{
+  auto start = window().reference_horizon.front();
+  start.twist = geometry_msgs::msg::Twist();
+  laser_msgs::msg::PoseWithHeading middle;
+  middle.position = start.pose.position;
+  middle.position.x = 2.0;
+  middle.heading = 0.7;
+  auto last = middle;
+  last.position.x = 3.0;
+  const auto plan = Planning::minco(start, {middle, last});
+  ASSERT_GT(plan.states.size(), 2U);
+  for (std::size_t i = 0; i < plan.states.size(); ++i) {
+    const double u = plan.times[i] / plan.times.back();
+    const double blend = std::pow(u, 4) * (35.0 + u * (-84.0 + u * (70.0 - 20.0 * u)));
+    EXPECT_NEAR(plan.states[i].pose.position.x, 1.0 + 2.0 * blend, 1e-8);
+  }
+}
+
+TEST_F(ReferenceHorizonsTest, MincoStopsAtEachWaypointAndCompletesTheMission)
+{
+  hover();
+  planner("minco");
+  Planning::finish_dwell(*planning);
+  ASSERT_TRUE(Planning::goal(*planning, 2.0, true, true));
+  Planning::wait(*planning);
+  set_time(*planning, Planning::end_time(*planning) + 0.01);
+  Planning::ready(*planning, Access::flight(*node), 2.0);
+  planning_tick();
+  ASSERT_EQ(Planning::waypoint(*planning), 1U);
+  Planning::wait(*planning);
+  set_time(*planning, Planning::end_time(*planning) + 0.01);
+  Planning::ready(*planning, Access::flight(*node), 3.0);
+  EXPECT_TRUE(planning_tick().terminal);
+  EXPECT_EQ(Planning::state(*planning), Status::COMPLETED);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoGotoPreservesMovingReferenceAndRejectsExcessiveSpeed)
+{
+  hover();
+  planner("minco");
+  ASSERT_TRUE(Planning::goal(*planning, 8.0));
+  Planning::wait(*planning);
+  const auto id = Planning::mission(*planning);
+  EXPECT_FALSE(Planning::goal(*planning, 3.0, false, false, 6.0));
+  EXPECT_EQ(Planning::mission(*planning), id);
+  Planning::ready(*planning, Access::flight(*node), 2.0, 3.0);
+  Planning::feedback(*planning, 30.0);
+  Planning::goto_goal(*planning, -2.0);
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_NEAR(Planning::refs(*planning).front().pose.position.x, 2.0, 1e-8);
+  EXPECT_NEAR(Planning::refs(*planning).front().twist.linear.x, 3.0, 1e-8);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, -2.0, 1e-8);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoYawOnlyUsesTheShortestRotationAcrossPi)
+{
+  auto start = window().reference_horizon.front();
+  start.twist = geometry_msgs::msg::Twist();
+  start.pose.orientation.w = std::cos(3.13 / 2.0);
+  start.pose.orientation.z = std::sin(3.13 / 2.0);
+  laser_msgs::msg::PoseWithHeading goal;
+  goal.position = start.pose.position;
+  goal.heading = -3.13;
+  const auto plan = Planning::minco(start, {goal});
+  ASSERT_GT(plan.states.size(), 2U);
+  EXPECT_LT(plan.times.back(), 1.0);
+  for (const auto & ref : plan.states) {
+    EXPECT_NEAR(ref.pose.position.x, start.pose.position.x, 1e-8);
+    EXPECT_LE(std::abs(ref.twist.angular.z), 1.0 + 1e-5);
+    EXPECT_GE(ref.twist.angular.z, -1e-8);
+  }
+}
+
+TEST_F(ReferenceHorizonsTest, SuperGotoKeepsTheCommittedTrajectoryUntilReplacementArrives)
+{
+  hover();
+  planner("super");
+  ASSERT_TRUE(Planning::goal(*planning, 6.0));
+  Planning::receive(*planning, polynomial());
+  const auto old = planning_tick();
+  set_time(*planning, 120.1);
+  Planning::ready(*planning, Access::flight(*node), 1.05, 0.5);
+  Planning::goto_goal(*planning, -2.0);
+  const auto pending = planning_tick();
+  EXPECT_EQ(pending.mission_id, old.mission_id);
+  EXPECT_NEAR(pending.reference_horizon.front().twist.linear.x, 0.5, 1e-9);
+  Planning::receive(*planning, polynomial());
+  EXPECT_EQ(Planning::state(*planning), Status::GENERATING);
+  auto next = polynomial();
+  next.header.stamp.nanosec = 100000000;
+  next.start_wt_pos = 120.1;
+  next.coef_pos_x[1] = 1.05;
+  Planning::receive(*planning, next);
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_GT(planning_tick().mission_id, old.mission_id);
+}
+
+TEST_F(ReferenceHorizonsTest, SuperWaitingForNextWaypointDoesNotPublishAPrematureTerminal)
+{
+  hover();
+  planner("super");
+  Planning::finish_dwell(*planning);
+  ASSERT_TRUE(Planning::goal(*planning, 2.0, true, true));
+  auto first = polynomial();
+  first.coef_pos_x[0] = 0.1;
+  Planning::receive(*planning, first);
+  set_time(*planning, 130.01);
+  Planning::ready(*planning, Access::flight(*node), 2.0);
+  planning_tick();
+  ASSERT_EQ(Planning::waypoint(*planning), 1U);
+  EXPECT_FALSE(planning_tick().terminal);
 }
 
 TEST_F(ReferenceHorizonsTest, SuperSamplingAndHeartbeatLiveOnlyInPlanningManager)
@@ -832,4 +1180,179 @@ TEST_F(ReferenceHorizonsTest, DebugTransformUsesMeasuredPoseWithoutChangingRefer
   EXPECT_EQ(Access::tick(*node, 121.0), held);
 }
 
+}  // namespace laser_uav_managers
+
+namespace laser_uav_managers
+{
+TEST_F(ReferenceHorizonsTest, PmmFirstTerminalWindowIsStationaryAndAccepted)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 2.0));
+  Planning::wait(*planning);
+  const double end = Planning::end_time(*planning) + 0.001;
+  set_time(*planning, end);
+  Planning::ready(*planning, Access::flight(*node), 2.0);
+  const auto raw = planning_tick();
+  ASSERT_TRUE(raw.terminal);
+  EXPECT_TRUE(Access::validate(*node, raw));
+  set_time(*node, end);
+  Access::receive(*node, raw);
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
+TEST_F(ReferenceHorizonsTest, MincoFirstTerminalWindowIsStationaryAndAccepted)
+{
+  hover();
+  planner("minco");
+  ASSERT_TRUE(Planning::goal(*planning, 2.0));
+  Planning::wait(*planning);
+  const double end = Planning::end_time(*planning) + 0.001;
+  set_time(*planning, end);
+  Planning::ready(*planning, Access::flight(*node), 2.0);
+  const auto raw = planning_tick();
+  ASSERT_TRUE(raw.terminal);
+  EXPECT_TRUE(Access::validate(*node, raw));
+  set_time(*node, end);
+  Access::receive(*node, raw);
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
+TEST_F(ReferenceHorizonsTest, LandingClearsCruiseTiltAndIndividualThrust)
+{
+  hover();
+  auto msg = window();
+  const Eigen::Quaterniond q(
+    Eigen::AngleAxisd(0.7, Eigen::Vector3d::UnitZ()) *
+    Eigen::AngleAxisd(0.45, Eigen::Vector3d::UnitY()));
+  for (auto & ref : msg.reference_horizon) {
+    ref.pose.orientation.w = q.w();
+    ref.pose.orientation.x = q.x();
+    ref.pose.orientation.y = q.y();
+    ref.pose.orientation.z = q.z();
+    ref.use_individual_thrust = true;
+    ref.individual_thrust.data = {6.0, 6.0, 6.0, 6.0};
+    ref.individual_thrust.unit_of_measurement = "N";
+  }
+  ASSERT_TRUE(Access::validate(*node, msg));
+  Access::receive(*node, msg);
+  Access::tick(*node, 120.0);
+  ASSERT_TRUE(Access::request(*node, true));
+  for (double time : {121.0, 125.0, 150.0}) {
+    const auto refs = Access::tick(*node, time);
+    for (const auto & ref : refs) {
+      const auto & orientation = ref.pose.orientation;
+      const Eigen::Quaterniond actual(
+        orientation.w, orientation.x, orientation.y, orientation.z);
+      EXPECT_NEAR((actual * Eigen::Vector3d::UnitZ()).head<2>().norm(), 0.0, 1e-12);
+      EXPECT_NEAR(ref.pose.orientation.z, std::sin(0.35), 1e-12);
+      EXPECT_DOUBLE_EQ(ref.pose.position.x, 1.0);
+      EXPECT_FALSE(ref.use_individual_thrust);
+      EXPECT_TRUE(ref.individual_thrust.data.empty());
+    }
+  }
+}
+
+TEST_F(ReferenceHorizonsTest, SuperWindowCoversPermittedClockSkew)
+{
+  hover();
+  planner("super");
+  ASSERT_TRUE(Planning::goal(*planning, 6.0));
+  Planning::receive(*planning, polynomial());
+  set_time(*planning, 120.014);
+  const auto raw = planning_tick();
+  ASSERT_TRUE(Access::validate(*node, raw));
+  set_time(*node, 120.005);
+  Access::receive(*node, raw);
+  EXPECT_TRUE(Access::has_external(*node));
+  EXPECT_EQ(Access::tick(*node, 120.005).size(), 21U);
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
+TEST_F(ReferenceHorizonsTest, SuperFirstTerminalWindowIsStationaryAndAccepted)
+{
+  hover();
+  planner("super");
+  ASSERT_TRUE(Planning::goal(*planning, 6.0));
+  Planning::receive(*planning, polynomial());
+  set_time(*planning, 130.001);
+  Planning::ready(*planning, Access::flight(*node), 6.0);
+  const auto raw = planning_tick();
+  ASSERT_TRUE(raw.terminal);
+  EXPECT_TRUE(Access::validate(*node, raw));
+  set_time(*node, 130.001);
+  Access::receive(*node, raw);
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
+class PlannerPreemptionTest : public ReferenceHorizonsTest,
+  public testing::WithParamInterface<const char *> {};
+
+TEST_P(PlannerPreemptionTest, NewestPathReplacesPendingGotoAndDiscardsItsResult)
+{
+  hover();
+  planner(GetParam());
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  const auto previous = planning_tick();
+  auto worker = Planning::delayed_worker(*planning);
+  Planning::ready(*planning, Access::flight(*node), 2.0, 0.5);
+  Planning::goto_goal(*planning, 4.0);
+  ASSERT_TRUE(Planning::goal(*planning, 5.0, false, true, 1.0));
+  const auto latest = Planning::mission(*planning);
+  EXPECT_EQ(planning_tick().mission_id, previous.mission_id);
+  worker.set_value({});
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_EQ(planning_tick().mission_id, latest);
+  EXPECT_NEAR(Planning::refs(*planning).front().pose.position.x, 2.0, 1e-8);
+  EXPECT_NEAR(Planning::refs(*planning).front().twist.linear.x, 0.5, 1e-8);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, 6.0, 1e-8);
+}
+
+TEST_P(PlannerPreemptionTest, GotoReplacesPathDuringWaypointHold)
+{
+  hover();
+  planner(GetParam());
+  ASSERT_TRUE(Planning::goal(*planning, 2.0, true, true));
+  Planning::wait(*planning);
+  set_time(*planning, Planning::end_time(*planning) + 0.001);
+  Planning::ready(*planning, Access::flight(*node), 2.0);
+  const auto previous = planning_tick();
+  ASSERT_EQ(Planning::waypoint(*planning), 0U);
+  Planning::goto_goal(*planning, -2.0);
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_GT(planning_tick().mission_id, previous.mission_id);
+  EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, -2.0, 1e-8);
+}
+
+INSTANTIATE_TEST_SUITE_P(Backends, PlannerPreemptionTest, testing::Values("pmm", "minco"));
+
+TEST_F(ReferenceHorizonsTest, SuperNewestGotoDiscardsThePreviousPendingReplacement)
+{
+  hover();
+  planner("super");
+  ASSERT_TRUE(Planning::goal(*planning, 6.0));
+  Planning::receive(*planning, polynomial());
+  const auto previous = planning_tick();
+  set_time(*planning, 120.1);
+  Planning::goto_goal(*planning, 8.0);
+  set_time(*planning, 120.2);
+  Planning::goto_goal(*planning, -2.0);
+  const auto latest = Planning::mission(*planning);
+  auto superseded = polynomial();
+  superseded.header.stamp.nanosec = 100000000;
+  superseded.start_wt_pos = 120.1;
+  Planning::receive(*planning, superseded);
+  EXPECT_EQ(Planning::state(*planning), Status::GENERATING);
+  EXPECT_EQ(planning_tick().mission_id, previous.mission_id);
+  auto replacement = polynomial();
+  replacement.header.stamp.nanosec = 200000000;
+  replacement.start_wt_pos = 120.2;
+  replacement.coef_pos_x = {-0.3, 1.0};
+  Planning::receive(*planning, replacement);
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_EQ(planning_tick().mission_id, latest);
+}
 }  // namespace laser_uav_managers

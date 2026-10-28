@@ -40,7 +40,7 @@ def generate_launch_description():
         ('control_manager_file', 'laser_uav_managers', 'params', 'control_manager.yaml'),
         ('planning_manager_file', 'laser_uav_managers', 'params', 'planning_manager.yaml'),
         ('uav_parameters_file', 'laser_uav_managers', 'params/laser_uavs', uav_type + '.yaml'),
-        ('agile_planner_file', 'laser_uav_planners', 'params/agile_planner', uav_type + '.yaml'),
+        ('pmm_planner_file', 'pmm_planner', 'params', uav_type + '.yaml'),
     ]:
         arguments.append(DeclareLaunchArgument(name, default_value=PathJoinSubstitution(
             [FindPackageShare(package), subdirectory, filename])))
@@ -62,7 +62,7 @@ def launch_setup(context, uav):
         package='laser_uav_managers', executable='planning_manager',
         name='planning_manager', namespace=uav, output='screen',
         parameters=[LaunchConfiguration(key) for key in [
-            'control_manager_file', 'uav_parameters_file', 'agile_planner_file',
+            'control_manager_file', 'uav_parameters_file', 'pmm_planner_file',
             'planning_manager_file']] + [{
                 'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[

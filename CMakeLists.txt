@@ -21,7 +21,7 @@ find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(mars_quadrotor_msgs REQUIRED)
 find_package(super_planner REQUIRED)
-find_package(laser_uav_planners REQUIRED)
+find_package(pmm_planner REQUIRED)
 find_package(Threads REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -53,7 +53,6 @@ set(dependencies
 find_library(laser_uav_lib laser_uav_lib)
 find_library(laser_uav_controllers laser_uav_controllers)
 find_library(laser_uav_estimators laser_uav_estimators)
-find_library(laser_uav_planners laser_uav_planners)
 
 link_directories(${full_model_build})
 
@@ -100,11 +99,11 @@ rclcpp_components_register_nodes(${library_name} "laser_uav_managers::ControlMan
 set(planning_library_name ${PROJECT_NAME}_planning_manager_core)
 set(planning_dependencies
   Eigen3 rclcpp rclcpp_lifecycle rclcpp_components geometry_msgs nav_msgs std_srvs
-  laser_msgs laser_uav_planners mars_quadrotor_msgs super_planner)
+  laser_msgs pmm_planner mars_quadrotor_msgs super_planner)
 add_library(${planning_library_name} SHARED src/planning_manager_node.cpp)
 target_compile_definitions(${planning_library_name} PRIVATE USE_ROS2 FMT_HEADER_ONLY)
 ament_target_dependencies(${planning_library_name} ${planning_dependencies})
-target_link_libraries(${planning_library_name} ${laser_uav_planners} Threads::Threads)
+target_link_libraries(${planning_library_name} Threads::Threads)
 rclcpp_components_register_nodes(${planning_library_name} "laser_uav_managers::PlanningManagerNode")
 add_executable(planning_manager src/planning_manager_main.cpp)
 ament_target_dependencies(planning_manager ${planning_dependencies})
@@ -154,7 +153,7 @@ if(BUILD_TESTING)
   target_compile_definitions(test_reference_horizons PRIVATE
     TEST_MANAGER_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/control_manager.yaml"
     TEST_UAV_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/laser_uavs/x500.yaml"
-    TEST_PLANNER_CONFIG_PATH="${laser_uav_planners_DIR}/../params/agile_planner/x500.yaml"
+    TEST_PLANNER_CONFIG_PATH="${pmm_planner_DIR}/../params/x500.yaml"
     TEST_CONTROLLER_CONFIG_PATH="${laser_uav_controllers_DIR}/../params/nmpc_controller/x500.yaml")
   ament_target_dependencies(test_reference_horizons ${dependencies} ${planning_dependencies})
   target_link_libraries(test_reference_horizons ${library_name} ${planning_library_name})

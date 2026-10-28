@@ -450,7 +450,7 @@ void ControlManagerNode::configure_services()
 
 void ControlManagerNode::configure_classes()
 {
-  RCLCPP_INFO(get_logger(), "Configuring NMPC/INDI (no AgilePlanner)");
+  RCLCPP_INFO(get_logger(), "Configuring NMPC/INDI");
 
   nmpc_solution_ = std::make_pair(
     Eigen::Vector3d::Zero(), Eigen::VectorXd::Zero(controller_multirotor_params_.n_motors));
@@ -901,15 +901,14 @@ void ControlManagerNode::build_hold_horizon(
 
 void ControlManagerNode::start_vertical_reference(double target_z, double speed)
 {
-  vertical_start_reference_ = commanded_reference_;
-  vertical_start_reference_.twist = geometry_msgs::msg::Twist();
+  set_hold_reference(commanded_reference_.pose);
+  vertical_start_reference_ = hold_reference_;
   vertical_target_z_ = target_z;
   // The quintic profile has maximum ds/dtau = 1.875.
   vertical_duration_ = std::max(
     acados_params_.dt,
     1.875 * std::abs(target_z - vertical_start_reference_.pose.position.z) / speed);
   vertical_time_started_ = false;
-  set_hold_reference(vertical_start_reference_.pose);
   hold_reference_.pose.position.z = target_z;
   have_external_reference_ = false;
 }
