@@ -28,8 +28,7 @@ constexpr double kTakeoffPositionTolerance = 0.10;
 ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
 : rclcpp_lifecycle::LifecycleNode("control_manager", "", options)
 {
-  RCLCPP_INFO(
-    get_logger(), "Creating LASER reference horizon + NMPC lifecycle ControlManagerNode");
+  RCLCPP_INFO(get_logger(), "Creating LASER reference horizon + NMPC lifecycle ControlManagerNode");
 
   declare_parameters_once();
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
@@ -103,9 +102,7 @@ void ControlManagerNode::declare_parameters_once()
   declare_parameter("debug.publish_reference_path", rclcpp::ParameterValue(true));
   declare_parameter("benchmark_metrics.enabled", rclcpp::ParameterValue(true));
   declare_parameter(
-    "benchmark_metrics.csv_path",
-    std::string("/tmp/laser_uav_control_metrics.csv"));
-
+    "benchmark_metrics.csv_path", std::string("/tmp/laser_uav_control_metrics.csv"));
 }
 
 CallbackReturn ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
@@ -288,22 +285,20 @@ void ControlManagerNode::get_parameters()
   if (
     controller_multirotor_params_.n_motors > 0 &&
     aux.as_double_array().size() >=
-    static_cast<std::size_t>(4 * controller_multirotor_params_.n_motors))
-  {
+      static_cast<std::size_t>(4 * controller_multirotor_params_.n_motors)) {
     controller_multirotor_params_.G1 =
       Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
-      aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
+        aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
   }
 
   get_parameter("multirotor_parameters.G2", aux);
   if (
     controller_multirotor_params_.n_motors > 0 &&
     aux.as_double_array().size() >=
-    static_cast<std::size_t>(4 * controller_multirotor_params_.n_motors))
-  {
+      static_cast<std::size_t>(4 * controller_multirotor_params_.n_motors)) {
     controller_multirotor_params_.G2 =
       Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
-      aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
+        aux.as_double_array().data(), 4, controller_multirotor_params_.n_motors);
   }
 
   get_parameter("multirotor_parameters.motor_inertia", controller_multirotor_params_.motor_inertia);
@@ -368,8 +363,7 @@ void ControlManagerNode::validate_parameters() const
   }
   if (
     safe_area_.enabled &&
-    (safe_area_.x.size() != 2 || safe_area_.y.size() != 2 || safe_area_.z.size() != 2))
-  {
+    (safe_area_.x.size() != 2 || safe_area_.y.size() != 2 || safe_area_.z.size() != 2)) {
     throw std::runtime_error("safe_area constraints must each contain [min, max]");
   }
 }
@@ -445,13 +439,13 @@ void ControlManagerNode::configure_services()
 
   srv_takeoff_ = create_service<std_srvs::srv::Trigger>(
     "takeoff", std::bind(
-      &ControlManagerNode::takeoff_service_callback, this, std::placeholders::_1,
-      std::placeholders::_2));
+                 &ControlManagerNode::takeoff_service_callback, this, std::placeholders::_1,
+                 std::placeholders::_2));
 
   srv_land_ = create_service<std_srvs::srv::Trigger>(
     "land", std::bind(
-      &ControlManagerNode::land_service_callback, this, std::placeholders::_1,
-      std::placeholders::_2));
+              &ControlManagerNode::land_service_callback, this, std::placeholders::_1,
+              std::placeholders::_2));
 }
 
 void ControlManagerNode::configure_classes()
@@ -491,11 +485,11 @@ void ControlManagerNode::odometry_callback(const nav_msgs::msg::Odometry & msg)
   const auto & q = msg.pose.pose.orientation;
   const auto & v = msg.twist.twist.linear;
   const auto & w = msg.twist.twist.angular;
-  const std::array<double, 13> state{
-    p.x, p.y, p.z, q.w, q.x, q.y, q.z, v.x, v.y, v.z, w.x, w.y, w.z};
-  if (!std::all_of(state.begin(), state.end(), [](double x) {return std::isfinite(x);}) ||
-    Eigen::Quaterniond(q.w, q.x, q.y, q.z).norm() < 1e-9)
-  {
+  const std::array<double, 13> state{p.x, p.y, p.z, q.w, q.x, q.y, q.z,
+                                     v.x, v.y, v.z, w.x, w.y, w.z};
+  if (
+    !std::all_of(state.begin(), state.end(), [](double x) { return std::isfinite(x); }) ||
+    Eigen::Quaterniond(q.w, q.x, q.y, q.z).norm() < 1e-9) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "Rejected invalid odometry");
     return;
   }
@@ -581,32 +575,43 @@ void ControlManagerNode::api_diagnostics_callback(const laser_msgs::msg::ApiPx4D
 
 void ControlManagerNode::reference_horizon_callback(const ReferenceHorizon & msg)
 {
-  if (!is_active_ || !takeoff_done_ || requested_land_ || land_rampdown_ ||
+  if (
+    !is_active_ || !takeoff_done_ || requested_land_ || land_rampdown_ ||
     msg.flight_id != flight_id_ || msg.mission_id <= closed_mission_id_ ||
     msg.mission_id < accepted_mission_id_ || msg.header.frame_id != reference_frame_id_ ||
-    msg.header.stamp.sec < 0 || msg.header.stamp.nanosec >= 1000000000U ||
-    msg.start_time.sec < 0 || msg.start_time.nanosec >= 1000000000U)
-  {
+    msg.header.stamp.sec < 0 || msg.header.stamp.nanosec >= 1000000000U || msg.start_time.sec < 0 ||
+    msg.start_time.nanosec >= 1000000000U) {
     return;
   }
   std::string reason;
-  const double age = (get_clock()->now() - rclcpp::Time(msg.header.stamp)).seconds();
-  if (age < -0.001 || age > reference_timeout_sec_) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Rejected horizon publication stamp");
+  const auto now = get_clock()->now();
+  const double age = (now - rclcpp::Time(msg.header.stamp)).seconds();
+  // Independent /clock subscriptions may differ by one outer control cycle.
+  const double clock_tolerance = 1.0 / rate_external_loop_control_;
+  if (age < -clock_tolerance || age > reference_timeout_sec_) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "Rejected horizon publication stamp | mission=%lu | age=%.2f ms | allowed=[-%.2f, %.2f] ms",
+      static_cast<unsigned long>(msg.mission_id), age * 1000.0, clock_tolerance * 1000.0,
+      reference_timeout_sec_ * 1000.0);
     return;
   }
   if (!validate_reference_horizon(msg, reason)) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "Rejected horizon: %s", reason.c_str());
     return;
   }
+  if ((now - rclcpp::Time(msg.start_time)).seconds() < msg.time_from_start.front()) {
+    return;
+  }
   if (have_external_reference_ && msg.mission_id == accepted_mission_id_) {
-    if (rclcpp::Time(msg.header.stamp) <= rclcpp::Time(latest_reference_.header.stamp) ||
-      (latest_reference_.terminal && !msg.terminal))
-    {
+    if (
+      rclcpp::Time(msg.header.stamp) <= rclcpp::Time(latest_reference_.header.stamp) ||
+      (latest_reference_.terminal && !msg.terminal)) {
       return;
     }
   }
   if (msg.mission_id > accepted_mission_id_) {
+    finish_rmse_run();
     emergency_hover_ = false;
   }
   latest_reference_ = msg;
@@ -646,19 +651,19 @@ bool ControlManagerNode::validate_reference_horizon(
       return false;
     }
     const auto & first = refs.front();
-    if (r.use_position != first.use_position || r.use_orientation != first.use_orientation ||
+    if (
+      r.use_position != first.use_position || r.use_orientation != first.use_orientation ||
       r.use_linear_velocity != first.use_linear_velocity ||
       r.use_angular_velocity != first.use_angular_velocity ||
-      r.use_individual_thrust != first.use_individual_thrust)
-    {
+      r.use_individual_thrust != first.use_individual_thrust) {
       reason = "reference flags change inside the trajectory window";
       return false;
     }
-    if (r.use_individual_thrust &&
+    if (
+      r.use_individual_thrust &&
       (r.individual_thrust.data.size() !=
-      static_cast<std::size_t>(controller_multirotor_params_.n_motors) ||
-      r.individual_thrust.unit_of_measurement != "N"))
-    {
+         static_cast<std::size_t>(controller_multirotor_params_.n_motors) ||
+       r.individual_thrust.unit_of_measurement != "N")) {
       reason = "individual thrust dimension or unit mismatch";
       return false;
     }
@@ -669,19 +674,19 @@ bool ControlManagerNode::validate_reference_horizon(
       }
     }
     if (msg.terminal) {
-      if (euclidean_distance(p, first.pose.position) > 1e-9 ||
+      if (
+        euclidean_distance(p, first.pose.position) > 1e-9 ||
         std::hypot(std::hypot(v.x, v.y), v.z) > 1e-9 ||
-        std::hypot(std::hypot(w.x, w.y), w.z) > 1e-9)
-      {
+        std::hypot(std::hypot(w.x, w.y), w.z) > 1e-9) {
         reason = "terminal reference must be stationary";
         return false;
       }
       if (r.use_orientation) {
         const auto & q0 = first.pose.orientation;
-        if (std::abs(
-            Eigen::Quaterniond(q.w, q.x, q.y, q.z).normalized().dot(
-              Eigen::Quaterniond(q0.w, q0.x, q0.y, q0.z).normalized())) < 1.0 - 1e-9)
-        {
+        if (
+          std::abs(Eigen::Quaterniond(q.w, q.x, q.y, q.z)
+                     .normalized()
+                     .dot(Eigen::Quaterniond(q0.w, q0.x, q0.y, q0.z).normalized())) < 1.0 - 1e-9) {
           reason = "terminal attitude must be constant";
           return false;
         }
@@ -696,7 +701,7 @@ laser_msgs::msg::ReferenceState ControlManagerNode::interpolate_reference(
   double alpha)
 {
   auto r = a;
-  const auto lerp = [alpha](double x, double y) {return x + alpha * (y - x);};
+  const auto lerp = [alpha](double x, double y) { return x + alpha * (y - x); };
   r.pose.position.x = lerp(a.pose.position.x, b.pose.position.x);
   r.pose.position.y = lerp(a.pose.position.y, b.pose.position.y);
   r.pose.position.z = lerp(a.pose.position.z, b.pose.position.z);
@@ -709,8 +714,10 @@ laser_msgs::msg::ReferenceState ControlManagerNode::interpolate_reference(
   if (r.use_orientation) {
     const auto & qa = a.pose.orientation;
     const auto & qb = b.pose.orientation;
-    const Eigen::Quaterniond q = Eigen::Quaterniond(qa.w, qa.x, qa.y, qa.z).normalized().slerp(
-      alpha, Eigen::Quaterniond(qb.w, qb.x, qb.y, qb.z).normalized());
+    const Eigen::Quaterniond q =
+      Eigen::Quaterniond(qa.w, qa.x, qa.y, qa.z)
+        .normalized()
+        .slerp(alpha, Eigen::Quaterniond(qb.w, qb.x, qb.y, qb.z).normalized());
     r.pose.orientation.w = q.w();
     r.pose.orientation.x = q.x();
     r.pose.orientation.y = q.y();
@@ -753,9 +760,7 @@ bool ControlManagerNode::sample_reference_horizon(
       const std::size_t hi = static_cast<std::size_t>(upper - times.begin());
       const std::size_t lo = hi - 1;
       output.push_back(
-        interpolate_reference(
-          refs[lo], refs[hi],
-          (time - times[lo]) / (times[hi] - times[lo])));
+        interpolate_reference(refs[lo], refs[hi], (time - times[lo]) / (times[hi] - times[lo])));
     }
   }
   return true;
@@ -943,18 +948,19 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
     build_vertical_horizon(now, current_horizon_path_);
   } else if (takeoff_done_) {
     if (have_external_reference_) {
-      const double age = std::chrono::duration<double>(
-        std::chrono::steady_clock::now() - last_reference_rx_).count();
+      const double age =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - last_reference_rx_)
+          .count();
       const double elapsed = (now - rclcpp::Time(latest_reference_.start_time)).seconds();
-      if ((!latest_reference_.terminal && age > reference_timeout_sec_) ||
-        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_))
-      {
+      if (
+        (!latest_reference_.terminal && age > reference_timeout_sec_) ||
+        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_)) {
         latch_reference_hold();
         build_hold_horizon(hold_reference_, current_horizon_path_);
       } else {
         hold_reference_ = current_horizon_path_.front();
-        diagnostics_.have_goal = !latest_reference_.terminal ||
-          !external_goal_reached(current_horizon_path_.front());
+        diagnostics_.have_goal =
+          !latest_reference_.terminal || !external_goal_reached(current_horizon_path_.front());
         if (diagnostics_.have_goal) {
           start_rmse_run_if_needed();
         } else {
@@ -1090,8 +1096,7 @@ void ControlManagerNode::check_safe_area()
 bool ControlManagerNode::estimate_mass()
 {
   if (
-    start_mass_estimation_ && std::abs(odometry_.twist.twist.linear.z) < kMassEstimateVzThreshold)
-  {
+    start_mass_estimation_ && std::abs(odometry_.twist.twist.linear.z) < kMassEstimateVzThreshold) {
     mass_estimation_time_start_ = get_clock()->now();
     start_mass_estimation_ = false;
   }
@@ -1136,10 +1141,9 @@ void ControlManagerNode::finish_rmse_run()
 bool ControlManagerNode::external_goal_reached(const laser_msgs::msg::ReferenceState & goal) const
 {
   const double pos_error = euclidean_distance(odometry_.pose.pose.position, goal.pose.position);
-  const double yaw_error = std::abs(
-    heading_error(
-      quaternion_to_heading(odometry_.pose.pose.orientation),
-      quaternion_to_heading(goal.pose.orientation)));
+  const double yaw_error = std::abs(heading_error(
+    quaternion_to_heading(odometry_.pose.pose.orientation),
+    quaternion_to_heading(goal.pose.orientation)));
   return pos_error < goal_position_tolerance_ && yaw_error < goal_heading_tolerance_;
 }
 
@@ -1191,8 +1195,8 @@ void ControlManagerNode::external_loop_timer_callback()
 
     diagnostics_.control_iteration_duration_ms =
       std::chrono::duration<double, std::milli>(
-      std::chrono::high_resolution_clock::now() - start_iteration)
-      .count();
+        std::chrono::high_resolution_clock::now() - start_iteration)
+        .count();
     return;
   }
 
@@ -1237,9 +1241,9 @@ void ControlManagerNode::external_loop_timer_callback()
   // Takeoff completion + original mass-estimation concept.
   if (requested_takeoff_ && !emergency_hover_) {
     const double z_error = std::abs(odometry_.pose.pose.position.z - takeoff_height_);
-    if ((ros_now - vertical_start_time_).seconds() >= vertical_duration_ &&
-      z_error < kTakeoffPositionTolerance)
-    {
+    if (
+      (ros_now - vertical_start_time_).seconds() >= vertical_duration_ &&
+      z_error < kTakeoffPositionTolerance) {
       if (estimate_mass()) {
         requested_takeoff_ = false;
         takeoff_done_ = true;
@@ -1275,8 +1279,8 @@ void ControlManagerNode::external_loop_timer_callback()
 
   diagnostics_.control_iteration_duration_ms =
     std::chrono::duration<double, std::milli>(
-    std::chrono::high_resolution_clock::now() - start_iteration)
-    .count();
+      std::chrono::high_resolution_clock::now() - start_iteration)
+      .count();
 }
 
 void ControlManagerNode::internal_loop_timer_callback()
@@ -1300,11 +1304,10 @@ void ControlManagerNode::internal_loop_timer_callback()
 
   laser_msgs::msg::MotorSpeed msg;
   for (Eigen::Index i = 0; i < indi_thrust.size(); ++i) {
-    msg.data.push_back(
-      laser_uav_controllers::thrustToThrotle(
-        controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
-        indi_thrust(i), controller_multirotor_params_.thrust_max,
-        controller_multirotor_params_.thrust_min));
+    msg.data.push_back(laser_uav_controllers::thrustToThrotle(
+      controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
+      indi_thrust(i), controller_multirotor_params_.thrust_max,
+      controller_multirotor_params_.thrust_min));
   }
 
   pub_motor_speed_reference_->publish(msg);
@@ -1334,18 +1337,18 @@ void ControlManagerNode::diagnostics_timer_callback()
 
 void ControlManagerNode::planning_diagnostics_callback(const PlanningDiagnostics & msg)
 {
-  if (!is_active_ || msg.flight_id != flight_id_ || msg.mission_id == 0 ||
+  if (
+    !is_active_ || msg.flight_id != flight_id_ || msg.mission_id == 0 ||
     msg.header.frame_id != reference_frame_id_ || msg.header.stamp.sec < 0 ||
     msg.header.stamp.nanosec >= 1000000000U || msg.start_time.sec < 0 ||
     msg.start_time.nanosec >= 1000000000U || msg.waypoint_count == 0 ||
     !std::isfinite(msg.goal.position.x) || !std::isfinite(msg.goal.position.y) ||
-    !std::isfinite(msg.goal.position.z) || !std::isfinite(msg.goal.heading))
-  {
+    !std::isfinite(msg.goal.position.z) || !std::isfinite(msg.goal.heading)) {
     return;
   }
   if (msg.state == PlanningDiagnostics::ABORTED || msg.state == PlanningDiagnostics::FAILED) {
     closed_mission_id_ = std::max(closed_mission_id_, msg.mission_id);
-    if (msg.mission_id == accepted_mission_id_ && takeoff_done_) {
+    if (msg.mission_id >= accepted_mission_id_ && takeoff_done_) {
       latch_reference_hold();
     }
     if (benchmark_.active && benchmark_.mission_id == msg.mission_id) {
@@ -1353,15 +1356,14 @@ void ControlManagerNode::planning_diagnostics_callback(const PlanningDiagnostics
     }
     return;
   }
-  if (msg.mission_id <= closed_mission_id_ || !takeoff_done_ || requested_land_ ||
-    msg.header.frame_id != reference_frame_id_)
-  {
+  if (
+    msg.mission_id <= closed_mission_id_ || !takeoff_done_ || requested_land_ ||
+    msg.header.frame_id != reference_frame_id_) {
     return;
   }
-  if ((msg.state == PlanningDiagnostics::GENERATING ||
-    msg.state == PlanningDiagnostics::TRACKING) &&
-    benchmark_.enabled && msg.mission_id > benchmark_.last_mission_id)
-  {
+  if (
+    (msg.state == PlanningDiagnostics::GENERATING || msg.state == PlanningDiagnostics::TRACKING) &&
+    benchmark_.enabled && msg.mission_id > benchmark_.last_mission_id) {
     cancel_benchmark();
     benchmark_.last_mission_id = msg.mission_id;
     benchmark_.mission_id = msg.mission_id;
@@ -1376,9 +1378,9 @@ void ControlManagerNode::planning_diagnostics_callback(const PlanningDiagnostics
     benchmark_.last_position = benchmark_.start_position;
     benchmark_.distance = 0.0;
   }
-  if (msg.state == PlanningDiagnostics::COMPLETED && benchmark_.active &&
-    msg.mission_id == benchmark_.mission_id)
-  {
+  if (
+    msg.state == PlanningDiagnostics::COMPLETED && benchmark_.active &&
+    msg.mission_id == benchmark_.mission_id) {
     benchmark_.completed = true;
   }
 }
@@ -1408,7 +1410,8 @@ void ControlManagerNode::update_benchmark(const rclcpp::Time & now)
   const double speed = duration > 1e-9 ? benchmark_.distance / duration : 0.0;
   benchmark_.active = false;
   RCLCPP_INFO(
-    get_logger(), "BENCHMARK RESULT | run=%lu | average_speed=%.4f m/s | distance=%.4f m | "
+    get_logger(),
+    "BENCHMARK RESULT | run=%lu | average_speed=%.4f m/s | distance=%.4f m | "
     "total_time=%.4f s | waypoints=%u",
     static_cast<unsigned long>(benchmark_.run_id), speed, benchmark_.distance, duration,
     benchmark_.waypoint_count);
@@ -1422,7 +1425,7 @@ void ControlManagerNode::update_benchmark(const rclcpp::Time & now)
   }
   if (output.tellp() == 0) {
     output << "run_id,start_time_s,end_time_s,total_time_s,distance_m,average_speed_mps,"
-      "waypoint_count,start_x,start_y,start_z,end_x,end_y,end_z\n";
+              "waypoint_count,start_x,start_y,start_z,end_x,end_y,end_z\n";
   }
   const auto & p = odometry_.pose.pose.position;
   output << benchmark_.run_id << ',' << std::fixed << std::setprecision(6)

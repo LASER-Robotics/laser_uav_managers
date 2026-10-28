@@ -20,6 +20,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(laser_msgs REQUIRED)
 find_package(mars_quadrotor_msgs REQUIRED)
+find_package(super_planner REQUIRED)
 find_package(laser_uav_planners REQUIRED)
 find_package(Threads REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -99,8 +100,9 @@ rclcpp_components_register_nodes(${library_name} "laser_uav_managers::ControlMan
 set(planning_library_name ${PROJECT_NAME}_planning_manager_core)
 set(planning_dependencies
   Eigen3 rclcpp rclcpp_lifecycle rclcpp_components geometry_msgs nav_msgs std_srvs
-  laser_msgs laser_uav_planners mars_quadrotor_msgs)
+  laser_msgs laser_uav_planners mars_quadrotor_msgs super_planner)
 add_library(${planning_library_name} SHARED src/planning_manager_node.cpp)
+target_compile_definitions(${planning_library_name} PRIVATE USE_ROS2 FMT_HEADER_ONLY)
 ament_target_dependencies(${planning_library_name} ${planning_dependencies})
 target_link_libraries(${planning_library_name} ${laser_uav_planners} Threads::Threads)
 rclcpp_components_register_nodes(${planning_library_name} "laser_uav_managers::PlanningManagerNode")
@@ -144,6 +146,9 @@ install(DIRECTORY launch params plotjuggler DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/refactor_plotjuggler_config.sh DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_planning_launch test/test_planning_launch.py
+    APPEND_ENV PYTHONDONTWRITEBYTECODE=1)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_reference_horizons test/test_reference_horizons.cpp)
   target_compile_definitions(test_reference_horizons PRIVATE

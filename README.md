@@ -18,7 +18,7 @@ Below is a list of the main ROS 2 nodes provided by this package.
 
 `ControlManagerNode` owns takeoff, landing, hold, safety, mass calibration,
 NMPC/INDI and hardware commands. `PlanningManagerNode` owns navigation goals,
-waypoint sequencing and the selected PMM or SUPER planner. Both are lifecycle
+waypoint sequencing and the selected MINCO, PMM or SUPER planner. Both are lifecycle
 nodes, launched as separate processes.
 
 The first valid odometry initializes the commanded reference once. Subsequent
@@ -59,13 +59,20 @@ and must increase strictly. All nodes use the same ROS clock and coordinate fram
 
 Only control interpolates those samples onto `now + i * dt`, for `N + 1` states.
 It uses linear interpolation and quaternion slerp, validates full future coverage,
-and never extrapolates. PMM returns raw samples and relative times; its API has no
+and never extrapolates. Publication stamps may lead the local ROS clock by one
+outer control cycle (10 ms at 100 Hz), accommodating independent `/clock`
+subscriptions. Larger clock differences and publications older than
+`reference.timeout` are rejected with their age in milliseconds. Raw windows
+include one controller step of history; a trajectory that has not started yet
+does not replace the current reference.
+
+PMM returns raw samples and relative times; its API has no
 controller dt, execution clock or hover state. Planning slices that raw trajectory
 into windows. SUPER polynomials are evaluated inside the existing planning node
 at `super.sampling_step`, independently of the controller grid. No separate
 `reference_horizon` or `super_trajectory` helper class/files are required.
 
-PMM optimization runs in a worker capturing its inputs by value. The planning
+MINCO/PMM optimization runs in a worker capturing its inputs by value. The planning
 timer continues to publish the existing segment while the next one is generated.
 No planner worker or trajectory mutex runs inside control. Timers still share the
 existing single-threaded control executor: configured 100 Hz outer / 250 Hz INDI
@@ -79,48 +86,102 @@ only that stationary endpoint may outlive its sample window and receive timeout.
 
 **Setup and supported missions**
 
-Build the three native repositories on `dev/separate_planning_and_control`:
+Build the native stack and its planner dependencies on `dev/separate_planning_and_control`:
 
 ```bash
-colcon build --packages-select laser_msgs laser_uav_planners laser_uav_managers \
+colcon build --packages-up-to laser_uav_managers laser_uav_tui \
   --allow-overriding laser_msgs laser_uav_planners laser_uav_managers
 source install/setup.bash
-ros2 launch laser_uav_managers planning_manager.launch.py planner:=pmm
+```
+
+Choose the planner in `params/planning_manager.yaml` before starting the managers:
+
+```yaml
+    planner: minco  # minco (default), pmm or super
+```
+
+The supplied file selects MINCO by default. The launch reads
+that same field to decide whether to start SUPER; no launch argument overrides it.
+Start each manager in its own terminal:
+
+```bash
+ros2 launch laser_uav_managers control_manager.launch.py
+ros2 launch laser_uav_managers planning_manager.launch.py
 ```
 
 The `laser_uav_tui` branch with the same name publishes navigation goals to the
 new planning-manager topics; rebuild that package when using the TUI.
 
-`planner` is read-only and chosen before startup. PMM does not start or resolve
-the optional `super_planner` executable. Select SUPER explicitly:
+`planner` is read-only and selected from the YAML before startup:
+
+| Planner | Intended use |
+| --- | --- |
+| `minco` | Smooth waypoint navigation using minimum snap (MINCO-S4). |
+| `pmm` | Minimum-time trajectories for fast flight and racing. |
+| `super` | Planning around obstacles using its map and replanner. |
+
+MINCO reuses the `MINCO_S4NU` implementation already present in SUPER; no second
+polynomial solver was introduced. The existing SUPER core library is exported
+for this purpose.
+The MINCO formulation is described in [Wang et al., T-RO 2022](https://arxiv.org/abs/2103.00190).
+
+MINCO uses degree-7 position and yaw polynomials with nonuniform segment times.
+For the selected waypoints and times it minimizes integrated squared snap.
+Segment times are stretched until continuous polynomial checks satisfy velocity,
+acceleration and yaw-rate limits; this is not a minimum-time optimizer. Default
+limits are `minco.max_velocity=2.0` m/s and `minco.max_acceleration=2.0` m/s².
+An initially faster commanded reference is preserved while planning its slowdown.
+The reference contract carries position and velocity, so initial acceleration
+and jerk are set to zero. MINCO and PMM do not perform collision checking.
+
+Each simulation tmux session supplies its own `configs/planning_manager.yaml`:
+PX4 uses PMM, FAST-LIO uses SUPER, and OpenVINS uses MINCO. The package default is MINCO.
+MINCO and PMM do not start the optional `super_planner` executable or mapping node.
+To use SUPER, set `planner: super` in the YAML and launch planning:
 
 ```bash
-ros2 launch laser_uav_managers planning_manager.launch.py planner:=super \
+ros2 launch laser_uav_managers planning_manager.launch.py \
   odometry_topic:=/uav1/estimation_manager/estimation \
-  reference_frame:=uav1/odometry cloud_topic:=/cloud_registered
+  reference_frame:=uav1/odometry cloud_topic:=/uav1/fast_lio/cloud_registered
 ```
 
-`UAV_NAME` and `UAV_TYPE` retain their LASER conventions. The launch shares the
-physical YAML and odometry source across the two managers. The PMM receives the
+`UAV_NAME` and `UAV_TYPE` retain their LASER conventions. Both launches use the same
+physical YAML and odometry defaults; pass matching overrides to each when changing
+them. Neither manager launch starts the other. The PMM receives the
 calibrated mass before generating a segment. Controller gains and ACADOS remain
 in `laser_uav_controllers`, without another solver copy in planning.
 
-SUPER requires the corresponding branch of its repository: its ROS interface
+The default cloud input is `/<uav>/fast_lio/cloud_registered`, matching LASER
+FAST-LIO. Use `cloud_topic:=...` when using another point-cloud source.
+
+SUPER requires its integration branch and the separate
+[LASER ROG-Map](https://github.com/LASER-Robotics/rog_map) package. The SUPER checkout
+must also provide its `mars_quadrotor_msgs` package. Its ROS interface
 publishes the configured `reference_frame_id` and propagates `EMER_STOP` in the
-heartbeat. A cloud supplied by `cloud_topic` must already be transformed into
-the **actual odometry frame**. Setting `reference_frame` names that existing
-coordinate system; it does not transform the cloud or the odometry. The sensor
-pipeline owns that transformation, outside both managers. Vendor YAML topic
+heartbeat. ROG-Map transforms the input cloud into the **actual odometry frame**
+using TF at the cloud timestamp and rejects clouds without that transform.
+Setting `reference_frame` names the existing odometry coordinate system; changing
+that parameter alone does not transform coordinates. Vendor YAML topic
 names are remapped by the launch; a custom SUPER config must retain those
 remapping source names or provide matching integration remaps.
 
-PMM supports one goal, a fly-through waypoint list, or a list with a configured
+MINCO and PMM support one goal, a fly-through waypoint list, or a list with a configured
 hold at each waypoint. SUPER supports one goal or a list with stops; multi-goal
-fly-through requests are rejected. Mission submission requires hover; finish or
-cancel an active mission before submitting another. Backend switching and
-in-motion replacement of a mission are outside this implementation.
+fly-through requests are rejected. A valid `goto`, `goto_relative` or
+`trajectory_path` replaces the current mission, including while moving. MINCO/PMM start
+from the commanded position and velocity and keep publishing the previous plan
+until the replacement is ready. If a calculation is still running, only the
+latest request is retained; the previous result cannot replace it. SUPER also
+keeps its committed trajectory until the new one arrives. Backend switching
+remains unsupported.
 SUPER uses its startup velocity limits; its waypoint requests require `speed=0`.
-Only PMM accepts a per-mission speed override.
+MINCO and PMM accept a per-mission speed override. MINCO rejects a requested speed
+above `minco.max_velocity`.
+
+Planning logs report accepted/replaced missions, the backend and target, trajectory
+duration, MINCO/PMM sample count or SUPER piece count, and calculation time. Waypoint
+holds, completion, cancellation and failures are logged as events; reference
+publications and SUPER heartbeats do not produce an INFO log every cycle.
 
 The `AgilePlanner` C++ API intentionally changed. Experimental
 `carrara_uav_managers` callers of its old constructor, `getTrajectory(N, time)`
@@ -140,26 +201,20 @@ local-maneuver priority, native time interpolation, preserved attitude/thrust,
 invalid/stale/frame/flight input, missing coverage, terminal hold, abort,
 original NMPC execution, artificial TF, mission CSV, PMM worker cancellation,
 PMM-to-control windows and SUPER polynomials/yaw/heartbeat/emergency stop.
+It also covers in-motion goal replacement, discarded workers, clock skew,
+MINCO's minimum-snap solution, waypoint passage/stops, and dynamic limits.
 It also checks that backend selection cannot change after startup.
+`test_planning_launch` checks YAML selection of all three backends, SUPER process
+selection, and invalid configuration files before any node is started.
 
 ```bash
 colcon test --packages-select laser_uav_managers \
   --ctest-args -R '^test_reference_horizons$' --output-on-failure
 ```
 
-The [initial audit](docs/planning_manager_audit.md) records the earlier proposal;
-this README describes the implemented contract, including the subsequent user
-choices: no legacy inputs, interpolation in control, setup-only backend, and
-no additional trajectory helper files. Passing these software checks does not
-establish SITL or real-flight behavior or timer deadlines under flight load.
-
-Validation of this round (2026-10-27): the three native C++ packages, SUPER and
-the TUI built in isolated `/tmp/laser_clean_*` directories. All 29 GTests passed.
-Changed manager C++ files passed cppcheck/uncrustify; manager launches and CMake
-files passed their linters. Python syntax, YAML and package manifests parsed.
-The TUI still has existing lint failures outside the changed topic lines.
-The ROS transport reported blocked UDP sockets in this environment; publication
-checks in the tests exercised a shared process, not interprocess DDS or SITL.
+Passing these software checks does not establish SITL or real-flight behavior
+or timer deadlines under flight load. The agent environment blocks UDP sockets;
+publication checks in these tests exercise a shared process, not interprocess DDS.
 
 ### 2. `estimation_manager`
 

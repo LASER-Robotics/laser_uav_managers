@@ -86,8 +86,12 @@ private:
   {
     std::vector<double> times;
     std::vector<laser_msgs::msg::ReferenceState> states;
+    rclcpp::Time start{0, 0, RCL_ROS_TIME};
     double elapsed_ms{0.0};
   };
+  static GeneratedPlan generate_minco(
+    const laser_msgs::msg::ReferenceState & start, const std::vector<Goal> & goals,
+    double speed, double acceleration, double sampling_step, double yaw_rate);
   std::future<GeneratedPlan> generation_;
   uint64_t generation_mission_id_{0};
   uint64_t plan_mission_id_{0};
@@ -121,6 +125,9 @@ private:
   double heading_tolerance_{0.15};
   double waypoint_hold_time_{3.0};
   double yaw_rate_limit_{1.0};
+  double minco_max_velocity_{2.0};
+  double minco_max_acceleration_{2.0};
+  double minco_sampling_step_{0.01};
   double planning_duration_ms_{0.0};
   double reference_period_ms_{0.0};
   uint8_t mission_state_{Status::IDLE};

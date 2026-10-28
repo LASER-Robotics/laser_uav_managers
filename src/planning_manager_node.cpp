@@ -1,4 +1,5 @@
 #include <laser_uav_managers/planning_manager_node.hpp>
+#include <traj_opt/minco.h>
 
 #include <algorithm>
 #include <cmath>
@@ -206,17 +207,133 @@ bool PlanningManagerNode::sample_super_trajectory(
   }
   return true;
 }
+PlanningManagerNode::GeneratedPlan PlanningManagerNode::generate_minco(
+  const laser_msgs::msg::ReferenceState & start, const std::vector<Goal> & goals,
+  double speed, double acceleration, double sampling_step, double yaw_rate)
+{
+  const int pieces = static_cast<int>(goals.size());
+  // shortcut: ReferenceState has no acceleration/jerk; seed zero until the contract carries them.
+  Eigen::Matrix<double, 3, 4> head = Eigen::Matrix<double, 3, 4>::Zero();
+  Eigen::Matrix<double, 3, 4> tail = head;
+  Eigen::Matrix<double, 3, 4> yaw_head = head;
+  Eigen::Matrix<double, 3, 4> yaw_tail = head;
+  head.col(0) << start.pose.position.x, start.pose.position.y, start.pose.position.z;
+  if (start.use_linear_velocity) {
+    head.col(1) << start.twist.linear.x, start.twist.linear.y, start.twist.linear.z;
+  }
+  yaw_head(0, 0) = yaw_of(start.pose.orientation);
+  yaw_head(0, 1) = start.use_angular_velocity ? start.twist.angular.z : 0.0;
+  Eigen::Matrix3Xd points(3, pieces - 1), yaw_points(3, pieces - 1);
+  yaw_points.setZero();
+  Eigen::VectorXd times(pieces);
+  Eigen::Vector3d previous = head.col(0);
+  double previous_yaw = yaw_head(0, 0);
+  for (int i = 0; i < pieces; ++i) {
+    const auto & goal = goals[static_cast<std::size_t>(i)];
+    const Eigen::Vector3d position(goal.position.x, goal.position.y, goal.position.z);
+    const double yaw = previous_yaw + std::remainder(goal.heading - previous_yaw, 2.0 * M_PI);
+    times[i] = std::max({0.1, 2.2 * (position - previous).norm() / speed,
+        2.2 * std::abs(yaw - previous_yaw) / yaw_rate});
+    if (i + 1 < pieces) {
+      points.col(i) = position;
+      yaw_points(0, i) = yaw;
+    }
+    previous = position;
+    previous_yaw = yaw;
+  }
+  tail.col(0) = previous;
+  yaw_tail(0, 0) = previous_yaw;
+  traj_opt::MINCO_S4NU position_solver, yaw_solver;
+  position_solver.setConditions(head, tail, pieces);
+  yaw_solver.setConditions(yaw_head, yaw_tail, pieces);
+  geometry_utils::Trajectory trajectory, yaw_trajectory;
+  const double velocity_limit = std::max(speed, head.col(1).norm()) * (1.0 + 1e-6);
+  const double yaw_limit = std::max(yaw_rate, std::abs(yaw_head(0, 1))) * (1.0 + 1e-6);
+  bool feasible = false;
+  for (int attempt = 0; attempt < 20; ++attempt) {
+    const double samples = std::ceil(times.sum() / sampling_step) + pieces + 1;
+    if (!times.allFinite() || !std::isfinite(samples) || samples > 250000) {
+      throw std::runtime_error("MINCO trajectory exceeds the sample limit");
+    }
+    position_solver.setParameters(points, times);
+    yaw_solver.setParameters(yaw_points, times);
+    if (!position_solver.getCoeffs().allFinite() || !yaw_solver.getCoeffs().allFinite()) {
+      throw std::runtime_error("MINCO returned non-finite polynomial coefficients");
+    }
+    position_solver.getTrajectory(trajectory);
+    yaw_solver.getTrajectory(yaw_trajectory);
+    if (trajectory.checkMaxVelRate(velocity_limit) &&
+      trajectory.checkMaxAccRate(acceleration) && yaw_trajectory.checkMaxVelRate(yaw_limit))
+    {
+      feasible = true;
+      break;
+    }
+    times *= 1.25;
+  }
+  if (!feasible) {
+    throw std::runtime_error("MINCO could not satisfy velocity, acceleration and yaw-rate limits");
+  }
+  GeneratedPlan result;
+  const auto sample = [&](double time) {
+      if (!result.times.empty() && time <= result.times.back() + 1e-9) {
+        return;
+      }
+      const Eigen::Vector3d position = trajectory.getPos(time);
+      const Eigen::Vector3d velocity = trajectory.getVel(time);
+      const double yaw = yaw_trajectory.getPos(time).x();
+      const Eigen::Vector3d thrust = trajectory.getAcc(time) + Eigen::Vector3d(0.0, 0.0, 9.81);
+      const Eigen::Vector3d z = thrust.norm() > 1e-9 ?
+        Eigen::Vector3d(thrust.normalized()) : Eigen::Vector3d::UnitZ();
+      Eigen::Vector3d x = Eigen::Vector3d(-std::sin(yaw), std::cos(yaw), 0.0).cross(z);
+      x = x.norm() > 1e-9 ? Eigen::Vector3d(x.normalized()) : z.unitOrthogonal();
+      Eigen::Matrix3d attitude;
+      attitude.col(0) = x;
+      attitude.col(1) = z.cross(x);
+      attitude.col(2) = z;
+      const Eigen::Quaterniond q(attitude);
+      laser_msgs::msg::ReferenceState ref;
+      ref.pose.position.x = position.x();
+      ref.pose.position.y = position.y();
+      ref.pose.position.z = position.z();
+      ref.pose.orientation.w = q.w();
+      ref.pose.orientation.x = q.x();
+      ref.pose.orientation.y = q.y();
+      ref.pose.orientation.z = q.z();
+      ref.twist.linear.x = velocity.x();
+      ref.twist.linear.y = velocity.y();
+      ref.twist.linear.z = velocity.z();
+      ref.twist.angular.z = yaw_trajectory.getVel(time).x();
+      ref.use_position = ref.use_orientation = true;
+      ref.use_linear_velocity = ref.use_angular_velocity = true;
+      result.times.push_back(time);
+      result.states.push_back(ref);
+    };
+  double offset = 0.0;
+  for (int i = 0; i < pieces; ++i) {
+    const int count = static_cast<int>(std::ceil(times[i] / sampling_step));
+    for (int j = 0; j < count; ++j) {
+      sample(offset + j * sampling_step);
+    }
+    offset += times[i];
+  }
+  sample(offset);
+  return result;
+}
+
 PlanningManagerNode::PlanningManagerNode(const rclcpp::NodeOptions & options)
 : rclcpp_lifecycle::LifecycleNode("planning_manager", "", options)
 {
   rcl_interfaces::msg::ParameterDescriptor setup_only;
   setup_only.read_only = true;
-  declare_parameter<std::string>("planner", "pmm", setup_only);
+  declare_parameter<std::string>("planner", "minco", setup_only);
   declare_parameter("rate.reference_horizon", 100.0);
   declare_parameter("control_state_timeout", 0.5);
   declare_parameter("planning_timeout", 5.0);
   declare_parameter("super.timeout", 0.5);
   declare_parameter("super.sampling_step", 0.01);
+  declare_parameter("minco.max_velocity", 2.0);
+  declare_parameter("minco.max_acceleration", 2.0);
+  declare_parameter("minco.sampling_step", 0.01);
   declare_parameter("goal.position_tolerance", 0.15);
   declare_parameter("goal.heading_tolerance", 0.15);
   declare_parameter("waypoint_hold_time", 3.0);
@@ -250,6 +367,9 @@ void PlanningManagerNode::read_parameters()
   get_parameter("planning_timeout", planning_timeout_);
   get_parameter("super.timeout", super_timeout_);
   get_parameter("super.sampling_step", super_sampling_step_);
+  get_parameter("minco.max_velocity", minco_max_velocity_);
+  get_parameter("minco.max_acceleration", minco_max_acceleration_);
+  get_parameter("minco.sampling_step", minco_sampling_step_);
   get_parameter("goal.position_tolerance", position_tolerance_);
   get_parameter("goal.heading_tolerance", heading_tolerance_);
   get_parameter("waypoint_hold_time", waypoint_hold_time_);
@@ -258,7 +378,7 @@ void PlanningManagerNode::read_parameters()
   const auto allocation = get_parameter("multirotor_parameters.G1").as_double_array();
   const auto inertia = get_parameter("multirotor_parameters.inertia").as_double_array();
   const auto rates = get_parameter("multirotor_parameters.omega_max").as_double_array();
-  if ((planner_ != "pmm" && planner_ != "super") || physical_.mass <= 0 ||
+  if ((planner_ != "minco" && planner_ != "pmm" && planner_ != "super") || physical_.mass <= 0 ||
     physical_.n_motors <= 0 ||
     allocation.size() != static_cast<std::size_t>(4 * physical_.n_motors) ||
     inertia.size() != 3 || rates.size() != 3)
@@ -271,7 +391,7 @@ void PlanningManagerNode::read_parameters()
   yaw_rate_limit_ = rates[2];
   for (double value : {publish_rate_, state_timeout_, planning_timeout_, super_timeout_,
       super_sampling_step_, position_tolerance_, heading_tolerance_, yaw_rate_limit_,
-      physical_.mass})
+      physical_.mass, minco_max_velocity_, minco_max_acceleration_, minco_sampling_step_})
   {
     if (!std::isfinite(value) || value <= 0.0) {
       throw std::invalid_argument("rates, timeouts, tolerances and mass must be positive and finite");
@@ -345,6 +465,14 @@ PlanningManagerNode::CallbackReturn PlanningManagerNode::on_configure(
 {
   try {
     read_parameters();
+    RCLCPP_INFO(
+      get_logger(), "Configured | planner=%s | reference=%.1f Hz | planning_timeout=%.2f s",
+      planner_.c_str(), publish_rate_, planning_timeout_);
+    if (planner_ == "minco") {
+      RCLCPP_INFO(
+        get_logger(), "MINCO-S4 minimum snap | max_velocity=%.2f m/s | max_acceleration=%.2f m/s^2",
+        minco_max_velocity_, minco_max_acceleration_);
+    }
     const auto stream_qos = rclcpp::QoS(1).best_effort();
     const auto state_qos = rclcpp::QoS(1).reliable().transient_local();
     pub_horizon_ = create_publisher<laser_msgs::msg::ReferenceHorizon>(
@@ -421,7 +549,7 @@ PlanningManagerNode::CallbackReturn PlanningManagerNode::on_cleanup(const rclcpp
 {
   if (generation_.valid()) {
     if (generation_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-      RCLCPP_WARN(get_logger(), "PMM worker is still finishing; cleanup can be retried");
+      RCLCPP_WARN(get_logger(), "Planner worker is still finishing; cleanup can be retried");
       return CallbackReturn::FAILURE;
     }
     poll_generation();
@@ -543,10 +671,6 @@ bool PlanningManagerNode::start_mission(const std::vector<Goal> & goals, double 
     reject("fresh control state and odometry in the same frame are required");
     return false;
   }
-  if (mission_.active || generation_.valid()) {
-    reject("finish or cancel the current mission before submitting another");
-    return false;
-  }
   if (goals.empty() || goals.size() > 256 || !std::isfinite(speed) || speed < 0.0) {
     reject("invalid waypoint count or speed");
     return false;
@@ -569,15 +693,23 @@ bool PlanningManagerNode::start_mission(const std::vector<Goal> & goals, double 
     reject("SUPER speed is configured at startup; use speed=0 in the mission");
     return false;
   }
-  const auto & velocity = odometry_->twist.twist.linear;
-  if (!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z) ||
-    std::hypot(std::hypot(velocity.x, velocity.y), velocity.z) > 0.15)
-  {
-    reject("a new mission must start from hover");
+  if (planner_ == "minco" && speed > minco_max_velocity_) {
+    reject("requested speed exceeds minco.max_velocity");
     return false;
   }
-  mission_.flight_id = control_->flight_id;
+  const auto & velocity = odometry_->twist.twist.linear;
+  if (!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z))
+  {
+    reject("odometry velocity must be finite");
+    return false;
+  }
   next_mission_id_ = std::max(next_mission_id_, control_->mission_id) + 1;
+  if (mission_.active) {
+    RCLCPP_INFO(
+      get_logger(), "Replacing mission %lu with mission %lu",
+      static_cast<unsigned long>(mission_.id), static_cast<unsigned long>(next_mission_id_));
+  }
+  mission_.flight_id = control_->flight_id;
   mission_.id = next_mission_id_;
   mission_.active = true;
   mission_.frame = control_->header.frame_id;
@@ -586,6 +718,13 @@ bool PlanningManagerNode::start_mission(const std::vector<Goal> & goals, double 
   mission_.speed = speed;
   mission_.stop = stop;
   mission_.start = get_clock()->now();
+  const auto & goal = goals.back();
+  RCLCPP_INFO(
+    get_logger(),
+    "Mission %lu accepted | planner=%s | waypoints=%zu | stops=%s | "
+    "goal=[%.2f, %.2f, %.2f] m | heading=%.2f rad",
+    static_cast<unsigned long>(mission_.id), planner_.c_str(), goals.size(),
+    stop ? "yes" : "no", goal.position.x, goal.position.y, goal.position.z, goal.heading);
   start_segment();
   return true;
 }
@@ -597,10 +736,11 @@ void PlanningManagerNode::start_segment()
   detail_.clear();
   generation_started_ = SteadyClock::now();
   if (planner_ == "super") {
-    have_super_trajectory_ = false;
     super_hold_ = hold_at(control_->reference);
-    plan_mission_id_ = mission_.id;
-    plan_flight_id_ = mission_.flight_id;
+    if (!have_super_trajectory_) {
+      plan_mission_id_ = mission_.id;
+      plan_flight_id_ = mission_.flight_id;
+    }
     super_goal_time_ = get_clock()->now();
     geometry_msgs::msg::PoseStamped msg;
     msg.header.stamp = super_goal_time_;
@@ -608,24 +748,40 @@ void PlanningManagerNode::start_segment()
     msg.pose.position = mission_.goals[mission_.index].position;
     msg.pose.orientation = yaw_quaternion(mission_.goals[mission_.index].heading);
     pub_super_goal_->publish(msg);
-  } else {
+  } else if (!generation_.valid()) {
     auto physical = physical_;
     physical.mass = control_->estimated_mass;
     const auto parameters = pmm_parameters_;
-    const auto start = hold_at(control_->reference);
+    const auto start = control_->reference;
+    const auto start_time = get_clock()->now();
     const auto goals = mission_.goals;
     const auto index = mission_.index;
     const auto stop = mission_.stop;
     const auto speed = mission_.speed;
     const auto yaw_limit = yaw_rate_limit_;
+    const auto backend = planner_;
+    const auto minco_speed = speed > 0.0 ? speed : minco_max_velocity_;
+    const auto minco_acceleration = minco_max_acceleration_;
+    const auto minco_step = minco_sampling_step_;
     generation_mission_id_ = mission_.id;
     generation_ = std::async(
       std::launch::async,
-      [physical, parameters, start, goals, index, stop, speed, yaw_limit]() {
+      [physical, parameters, start, start_time, goals, index, stop, speed, yaw_limit,
+        backend, minco_speed, minco_acceleration, minco_step]() {
         const auto began = SteadyClock::now();
         GeneratedPlan result;
+        result.start = start_time;
         const auto & goal = stop ? goals[index] : goals.back();
-        if ((stop || goals.size() == 1) && distance(start.pose.position, goal.position) < 1e-8) {
+        if (backend == "minco") {
+          result = generate_minco(
+            start, stop ? std::vector<Goal>{goals[index]} : goals,
+            minco_speed, minco_acceleration, minco_step, yaw_limit);
+          result.start = start_time;
+        } else if ((stop || goals.size() == 1) && distance(start.pose.position, goal.position) < 1e-8 &&
+          (!start.use_linear_velocity ||
+          std::hypot(std::hypot(start.twist.linear.x, start.twist.linear.y),
+          start.twist.linear.z) < 1e-8))
+        {
           const double yaw = yaw_of(start.pose.orientation);
           const double delta = std::remainder(goal.heading - yaw, 2.0 * M_PI);
           const double duration =
@@ -669,10 +825,10 @@ void PlanningManagerNode::start_segment()
           }
         }
         if (result.times.size() < 2 || result.times.size() > 250000) {
-          throw std::runtime_error("PMM returned an empty or excessively large trajectory");
+          throw std::runtime_error("planner returned an empty or excessively large trajectory");
         }
         if (!std::all_of(result.states.begin(), result.states.end(), finite_state)) {
-          throw std::runtime_error("PMM returned a non-finite reference");
+          throw std::runtime_error("planner returned a non-finite reference");
         }
         result.states.back().twist = geometry_msgs::msg::Twist();
         result.elapsed_ms = std::chrono::duration<double, std::milli>(
@@ -703,8 +859,14 @@ void PlanningManagerNode::poll_generation()
     plan_mission_id_ = mission_.id;
     plan_flight_id_ = mission_.flight_id;
     plan_final_ = !mission_.stop || mission_.index + 1 == mission_.goals.size();
-    plan_start_ = get_clock()->now();
+    plan_start_ = plan_->start;
     mission_state_ = Status::TRACKING;
+    RCLCPP_INFO(
+      get_logger(),
+      "Mission %lu | %s segment %zu/%zu ready | duration=%.3f s | samples=%zu | planning=%.2f ms",
+      static_cast<unsigned long>(mission_.id), planner_.c_str(), mission_.stop ? mission_.index + 1 : 1,
+      mission_.stop ? mission_.goals.size() : 1,
+      plan_->times.back() - plan_->times.front(), plan_->states.size(), planning_duration_ms_);
     publish_status();
   } catch (const std::exception & e) {
     if (active_ && mission_.active && mission_.id == generation_mission_id_) {
@@ -736,10 +898,18 @@ void PlanningManagerNode::super_trajectory_callback(const Polynomial & msg)
       RCLCPP_ERROR(get_logger(), "%s", reason.c_str());
       return;
     }
+    plan_mission_id_ = mission_.id;
+    plan_flight_id_ = mission_.flight_id;
+    plan_final_ = mission_.index + 1 == mission_.goals.size();
     super_last_rx_ = SteadyClock::now();
     planning_duration_ms_ = std::chrono::duration<double, std::milli>(
       SteadyClock::now() - generation_started_).count();
     mission_state_ = Status::TRACKING;
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "Mission %lu | SUPER trajectory ready | duration=%.3f s | pieces=%u | planning=%.2f ms",
+      static_cast<unsigned long>(mission_.id), super_end_time() - msg.start_wt_pos,
+      msg.piece_num_pos, planning_duration_ms_);
     publish_status();
   } else if ((msg.type & Polynomial::HEART_BEAT) != 0 && matches_super_trajectory(msg)) {
     super_last_rx_ = SteadyClock::now();
@@ -776,6 +946,11 @@ void PlanningManagerNode::timer_callback()
     abort_mission("planning deadline exceeded", Status::FAILED);
     return;
   }
+  if (planner_ != "super" && mission_.active && mission_state_ == Status::GENERATING &&
+    !generation_.valid())
+  {
+    start_segment();
+  }
   const auto now = get_clock()->now();
   const double coverage = (control_->horizon_length + 2) * control_->horizon_dt;
   laser_msgs::msg::ReferenceHorizon output;
@@ -784,7 +959,7 @@ void PlanningManagerNode::timer_callback()
   output.flight_id = plan_flight_id_;
   output.mission_id = plan_mission_id_;
   bool segment_terminal = false;
-  if (planner_ == "pmm" && plan_) {
+  if (planner_ != "super" && plan_) {
     const double elapsed = (now - plan_start_).seconds();
     const auto & times = plan_->times;
     const auto & states = plan_->states;
@@ -793,7 +968,7 @@ void PlanningManagerNode::timer_callback()
       return;
     }
     output.start_time = plan_start_;
-    auto first = std::upper_bound(times.begin(), times.end(), elapsed);
+    auto first = std::upper_bound(times.begin(), times.end(), elapsed - control_->horizon_dt);
     if (first != times.begin()) {
       --first;
     }
@@ -839,7 +1014,7 @@ void PlanningManagerNode::timer_callback()
       for (int i = 0; i < count; ++i) {
         output.time_from_start.push_back(i * super_sampling_step_);
       }
-      output.terminal = segment_terminal && mission_.index + 1 == mission_.goals.size();
+      output.terminal = segment_terminal && plan_final_;
     } else {
       if (!mission_.active) {
         return;
@@ -872,6 +1047,10 @@ void PlanningManagerNode::timer_callback()
   if (mission_.stop && mission_.index + 1 < mission_.goals.size()) {
     if (!dwelling_since_) {
       dwelling_since_ = now;
+      RCLCPP_INFO(
+        get_logger(), "Mission %lu | waypoint %zu/%zu reached | hold=%.2f s",
+        static_cast<unsigned long>(mission_.id), mission_.index + 1,
+        mission_.goals.size(), waypoint_hold_time_);
     }
     if ((now - *dwelling_since_).seconds() >= waypoint_hold_time_) {
       ++mission_.index;
@@ -881,6 +1060,10 @@ void PlanningManagerNode::timer_callback()
     mission_.active = false;
     mission_state_ = Status::COMPLETED;
     detail_ = "mission completed";
+    RCLCPP_INFO(
+      get_logger(), "Mission %lu completed | planner=%s | elapsed=%.3f s",
+      static_cast<unsigned long>(mission_.id), planner_.c_str(),
+      (now - mission_.start).seconds());
     publish_status();
   }
 }
@@ -891,6 +1074,10 @@ void PlanningManagerNode::abort_mission(const std::string & reason, uint8_t stat
     mission_.active = false;
     mission_state_ = state;
     detail_ = reason;
+    RCLCPP_WARN(
+      get_logger(), "Mission %lu %s | planner=%s | reason=%s",
+      static_cast<unsigned long>(mission_.id), state == Status::FAILED ? "failed" : "aborted",
+      planner_.c_str(), reason.c_str());
     publish_status();
   }
   plan_.reset();
