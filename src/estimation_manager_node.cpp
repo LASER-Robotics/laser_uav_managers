@@ -432,6 +432,8 @@ void EstimationManager::odometry_open_vins_callback(const nav_msgs::msg::Odometr
 {
   std::lock_guard<std::mutex> lock(openvins_odom_data_.mtx);
   if (enable_openvins_odom_) {
+    msg->header.frame_id = uav_name_ + "/odometry";
+    msg->child_frame_id = uav_name_ + "/fcu";
     odom_pub_->publish(*msg);
   }
   RCLCPP_DEBUG_THROTTLE(
@@ -967,6 +969,9 @@ void EstimationManager::timer_callback()
       if (px4_odom_data_.last_msg) {
         auto msg = px4_odom_data_.last_msg;
         msg->header.stamp = this->get_clock()->now();
+        msg->header.frame_id = uav_name_ + "/odometry";
+        msg->child_frame_id = uav_name_ + "/fcu";
+
         odom_pub_->publish(*msg);
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000, "OpenVins waiting for data... using PX4 fallback.");

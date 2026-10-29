@@ -14,6 +14,20 @@
       threshold_detect: 0.70 # [0, 1]
       speed: 0.3 # m/s
 
+    reference:
+      timeout: 0.50 # seconds since the last native trajectory window
+
+    goal:
+      position_tolerance: 0.45
+      heading_tolerance: 3.15
+
+    debug:
+      publish_reference_path: true
+
+    benchmark_metrics:
+      enabled: true
+      csv_path: /tmp/laser_uav_control_metrics.csv
+
     filter_params:
       butterworth:
         gyro_a: [1.0000, -1.5782, 0.6528]
