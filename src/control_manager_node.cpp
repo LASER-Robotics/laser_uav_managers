@@ -1,5 +1,7 @@
 #include "laser_uav_managers/control_manager_node.hpp"
 
+#include <cmath>
+
 namespace laser_uav_managers
 {
 /* ControlManagerNode() //{ */
@@ -133,6 +135,7 @@ ControlManagerNode::ControlManagerNode(const rclcpp::NodeOptions & options)
 
   declare_parameter("drone_avoidance.time_window", rclcpp::ParameterValue(1.0));
   declare_parameter("drone_avoidance.r_colision", rclcpp::ParameterValue(3.0));
+  declare_parameter("drone_avoidance.state_timeout", rclcpp::ParameterValue(0.5));
   declare_parameter(
     "drone_avoidance.r_local_neighbor",
     rclcpp::ParameterValue(10.0));
@@ -181,6 +184,10 @@ ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
   RCLCPP_INFO(get_logger(), "Configuring");
 
   get_parameters();
+  if (!std::isfinite(rvc_state_timeout_) || rvc_state_timeout_ <= 0.0) {
+    RCLCPP_ERROR(get_logger(), "drone_avoidance.state_timeout must be finite and positive");
+    return CallbackReturn::FAILURE;
+  }
   configure_pub_sub();
   configure_timers();
   configure_services();
@@ -195,6 +202,10 @@ CallbackReturn ControlManagerNode::on_activate(
   [[maybe_unused]] const rclcpp_lifecycle::State & state)
 {
   RCLCPP_INFO(get_logger(), "Activating");
+
+  relative_velocity_position_neighbor_.array.clear();
+  received_first_odometry_gps_msg_ = false;
+  last_rvc_update_time_.reset();
 
   if (angular_rates_and_thrust_mode_) {
     pub_attitude_rates_and_thrust_reference_->on_activate();
@@ -399,6 +410,7 @@ void ControlManagerNode::get_parameters()
 
   get_parameter("drone_avoidance.time_window", _time_window_);
   get_parameter("drone_avoidance.r_colision", _r_colision_);
+  get_parameter("drone_avoidance.state_timeout", rvc_state_timeout_);
 
   get_parameter("nmpc_controller.nmpc_mode", acados_params_.nmpc_mode);
   if (acados_params_.nmpc_mode == "individual_thrust") {
@@ -757,7 +769,27 @@ void ControlManagerNode::odometry_gps_callback(
     return;
   }
 
+  const auto evaluation_time = now();
+  if (msg.header.stamp.sec < 0 || msg.header.stamp.nanosec >= 1000000000u) {
+    return;
+  }
+  const rclcpp::Time incoming(msg.header.stamp, evaluation_time.get_clock_type());
+  const double age = (evaluation_time - incoming).seconds();
+  const Eigen::Vector3d velocity(msg.twist.twist.linear.x,
+    msg.twist.twist.linear.y, msg.twist.twist.linear.z);
+  if (!velocity.allFinite() || age < -rvc_state_timeout_ || age > rvc_state_timeout_) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 1000, "Invalid or expired world velocity for RVC");
+    return;
+  }
+  if (received_first_odometry_gps_msg_) {
+    const rclcpp::Time previous(odometry_gps_.header.stamp, evaluation_time.get_clock_type());
+    if (previous <= evaluation_time && incoming < previous) {
+      return;
+    }
+  }
   odometry_gps_ = msg;
+  received_first_odometry_gps_msg_ = true;
 }
 //}
 
@@ -1078,52 +1110,130 @@ void ControlManagerNode::external_loop_timer_callback()
   std::vector<double> tv_m_nmpc_array(5, 0.0);
 
   int drone_i = 0;
+  bool collision_predicted = false;
 
+  const auto control_time = now();
+  if (last_rvc_update_time_ && control_time < *last_rvc_update_time_) {
+    relative_velocity_position_neighbor_.array.clear();
+    received_first_odometry_gps_msg_ = false;
+  }
+  last_rvc_update_time_ = control_time;
+
+  // GPS and avoidance velocities already use world axes. Only odometry_ has
+  // body-frame velocity; NmpcController handles that conversion separately.
+  const Eigen::Vector3d velocity_world(odometry_gps_.twist.twist.linear.x,
+    odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
+  const double own_velocity_age = (control_time - rclcpp::Time(
+    odometry_gps_.header.stamp, control_time.get_clock_type())).seconds();
+  const bool own_velocity_usable = received_first_odometry_gps_msg_ &&
+    velocity_world.allFinite() && own_velocity_age >= 0.0 && own_velocity_age <= rvc_state_timeout_;
 
   for (const auto & uav : relative_velocity_position_neighbor_.array) {
     if (drone_i >= 5) {
       break;
     }
-
-    Eigen::Vector3d velocity_gps(odometry_gps_.twist.twist.linear.x,
-      odometry_gps_.twist.twist.linear.y, odometry_gps_.twist.twist.linear.z);
+    if (!own_velocity_usable || uav.header.frame_id != "world" || uav.child_frame_id != "world") {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000, "RVC requires valid velocity and neighbor states in world");
+      continue;
+    }
+    if (uav.header.stamp.sec < 0 || uav.header.stamp.nanosec >= 1000000000u) {
+      continue;
+    }
+    const double state_age = (control_time - rclcpp::Time(
+      uav.header.stamp, control_time.get_clock_type())).seconds();
+    if (state_age < 0.0 || state_age > rvc_state_timeout_) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000, "Expired or future relative state; ignoring RVC observation");
+      continue;
+    }
 
     Eigen::Vector3d relative_position(uav.pose.position.x, uav.pose.position.y,
       uav.pose.position.z);
     Eigen::Vector3d relative_velocity(uav.twist.linear.x, uav.twist.linear.y, uav.twist.linear.z);
+    // p_rel = p_neighbor - p_self, v_rel = v_self - v_neighbor.
+    relative_position -= relative_velocity * state_age;
 
-    Eigen::Vector3d colision_center = relative_position / _time_window_;
-    double r_safe = _r_colision_ / _time_window_;
+    // ORCA's finite-horizon velocity obstacle has a spherical cap and a cone.
+    // p_rel = p_neighbor - p_self; v_rel = v_self - v_neighbor, both in world.
+    const double control_step = 1.0 / rate_external_loop_control_;
+    const double distance = relative_position.stableNorm();
+    if (!relative_position.allFinite() || !relative_velocity.allFinite() ||
+      !std::isfinite(distance) || !std::isfinite(_r_colision_) ||
+      !std::isfinite(_time_window_) || !std::isfinite(control_step) ||
+      _r_colision_ <= 0.0 || _time_window_ <= 0.0 || control_step <= 0.0)
+    {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000, "Invalid state or parameters for an RVC constraint");
+      continue;
+    }
 
-    Eigen::Vector3d w_gps = relative_velocity - colision_center;
-    double w_norm = w_gps.norm();
+    constexpr double direction_tolerance = 1e-9;
+    const bool overlapping = distance <= _r_colision_;
+    Eigen::Vector3d Am_world;
+    Eigen::Vector3d u_world;
 
-    double bm = 0.0;
-    double tv_m = 0.0;
-
-    if (w_norm < r_safe) {
-      RCLCPP_WARN(this->get_logger(), "Imminent drone collision!");
-      diagnostics_.collision = true;
-      collision_loop = 0;
-
-      Eigen::Vector3d Am_gps = w_gps / w_norm;
-      Eigen::Vector3d u_gps = Am_gps * (r_safe - w_norm);
-
-      Eigen::Vector3d v_safe = velocity_gps + (0.5 * u_gps);
-
-      bm = Am_gps.dot(v_safe);
-
-      Am_nmpc_array[drone_i * 3 + 0] = Am_gps.x();
-      Am_nmpc_array[drone_i * 3 + 1] = Am_gps.y();
-      Am_nmpc_array[drone_i * 3 + 2] = Am_gps.z();
-      bm_nmpc_array[drone_i] = bm;
+    if (overlapping) {
+      // Recover separation using the control period instead of the ORCA horizon.
+      const Eigen::Vector3d w = relative_velocity - relative_position / control_step;
+      const double w_length = w.stableNorm();
+      if (w_length > direction_tolerance) {
+        Am_world = w / w_length;
+      } else if (distance > direction_tolerance) {
+        Am_world = -relative_position / distance;
+      } else {
+        // Coincident stationary centers have no uniquely defined normal.
+        Am_world = Eigen::Vector3d::UnitX();
+      }
+      u_world = (_r_colision_ / control_step - w_length) * Am_world;
     } else {
-      if (collision_loop >= 200) {
-        diagnostics_.collision = false;
+      const Eigen::Vector3d axis = relative_position / distance;
+      const double sin_angle = _r_colision_ / distance;
+      const double cos_angle = std::sqrt((1.0 - sin_angle) * (1.0 + sin_angle));
+      const Eigen::Vector3d w = relative_velocity - relative_position / _time_window_;
+      const double w_length = w.stableNorm();
+
+      if (w_length > direction_tolerance && w.dot(axis) < -sin_angle * w_length) {
+        // Project onto the exposed spherical cap, not the entire cutoff sphere.
+        Am_world = w / w_length;
+        u_world = (_r_colision_ / _time_window_ - w_length) * Am_world;
+      } else {
+        // Project onto the conical side, including the cap/cone junction.
+        const Eigen::Vector3d lateral = relative_velocity - relative_velocity.dot(axis) * axis;
+        const double lateral_length = lateral.stableNorm();
+        Eigen::Vector3d lateral_direction;
+        if (lateral_length > direction_tolerance) {
+          lateral_direction = lateral / lateral_length;
+        } else {
+          // Opposite relative positions choose opposite head-on escape directions.
+          Eigen::Index least_aligned_axis;
+          axis.cwiseAbs().minCoeff(&least_aligned_axis);
+          lateral_direction = axis.cross(Eigen::Vector3d::Unit(least_aligned_axis)).normalized();
+        }
+        Am_world = -sin_angle * axis + cos_angle * lateral_direction;
+        u_world = -relative_velocity.dot(Am_world) * Am_world;
       }
     }
 
-    if (relative_velocity.squaredNorm() > 1e-6) {
+    // Retain the outward normal even for currently safe relative velocities.
+    const double bm = Am_world.dot(velocity_world + 0.5 * u_world);
+    if (!Am_world.allFinite() || !u_world.allFinite() || !std::isfinite(bm)) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000, "Non-finite RVC geometry; ignoring this constraint");
+      continue;
+    }
+
+    Am_nmpc_array[drone_i * 3 + 0] = Am_world.x();
+    Am_nmpc_array[drone_i * 3 + 1] = Am_world.y();
+    Am_nmpc_array[drone_i * 3 + 2] = Am_world.z();
+    bm_nmpc_array[drone_i] = bm;
+    collision_predicted = collision_predicted || overlapping || Am_world.dot(u_world) > 1e-9;
+
+    double tv_m = 0.0;
+    if (overlapping) {
+      // Keep recovery active even when relative velocity is zero or separating.
+      tv_m = acados_params_.N * acados_params_.dt;
+    } else if (relative_velocity.squaredNorm() > 1e-6) {
       tv_m = std::max(
         relative_position.dot(
           relative_velocity) / relative_velocity.squaredNorm(), 0.0);
@@ -1135,7 +1245,15 @@ void ControlManagerNode::external_loop_timer_callback()
   }
 
   nmpc_controller_.setRVCConstraints(Am_nmpc_array, bm_nmpc_array, tv_m_nmpc_array);
-  collision_loop++;
+  if (collision_predicted) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Imminent drone collision!");
+    diagnostics_.collision = true;
+    collision_loop = 0;
+  } else if (collision_loop < 200) {
+    ++collision_loop;
+  } else {
+    diagnostics_.collision = false;
+  }
 
   // Handle landing thrust ramp-down after touchdown is detected
   if (land_rampdown_) {

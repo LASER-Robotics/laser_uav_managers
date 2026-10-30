@@ -5,6 +5,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -162,6 +163,7 @@ private:
   nav_msgs::msg::Odometry odometry_;
   nav_msgs::msg::Odometry odometry_gps_;
   laser_msgs::msg::NeighborOdomArray relative_velocity_position_neighbor_;
+  std::optional<rclcpp::Time> last_rvc_update_time_;
   laser_msgs::msg::ReferenceState last_waypoint_;
   std::vector<laser_msgs::msg::PoseWithHeading> desired_path_;
   std::vector<laser_msgs::msg::ReferenceState> current_horizon_path_;
@@ -201,6 +203,7 @@ private:
 
   double _time_window_;
   double _r_colision_;
+  double rvc_state_timeout_{0.5};
 
   int lock_waypoint_;
 
@@ -223,6 +226,7 @@ private:
   bool calculate_rmse_{false};
   bool start_mass_estimation_{false};
   bool received_first_odometry_msg_{false};
+  bool received_first_odometry_gps_msg_{false};
   bool angular_rates_and_thrust_mode_{false};
   bool lock_control_inputs_{true};
   bool have_nmpc_solution_{false};

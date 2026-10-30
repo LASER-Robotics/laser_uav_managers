@@ -92,7 +92,7 @@ def generate_launch_description():
                     nmpc_controller_file, {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[
             ('/' + uav_name + '/odometry_in', '/' + uav_name + '/estimation_manager/estimation'),
-            ('/' + uav_name + '/odometry_gps_in', '/' + uav_name + '/ground_truth'),
+            ('/' + uav_name + '/odometry_gps_in', '/' + uav_name + '/gamma/pose_with_vel'),
             ('/' + uav_name + '/relative_velocity_position_neighbor_in', '/' + uav_name + '/neighbor_velocity_position'),
             ('/' + uav_name + '/motor_speed_estimation_in',
              '/' + uav_name + '/hw_api/motor_speed_estimated'),
