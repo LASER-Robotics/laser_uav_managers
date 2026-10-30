@@ -11,7 +11,7 @@
 
     drone_avoidance:
       time_window: 8.0 # s
-      r_colision: 0.6 # m
+      r_colision: 1.5 # m
       state_timeout: 0.5 # s, maximum age of GPS/relative observations
     
     land:

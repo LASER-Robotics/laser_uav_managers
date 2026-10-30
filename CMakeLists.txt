@@ -78,14 +78,16 @@ add_library(${library_name} SHARED src/control_manager_node.cpp)
 
 ament_target_dependencies(${control_executable_name} ${dependencies})
 
+# The component must resolve its dependencies without the standalone executable.
 target_link_libraries(
-  ${control_executable_name}
   ${library_name}
   ${laser_uav_planners}
   ${laser_uav_controllers}
   ${full_model_build}/libacados_ocp_solver_multirotor_ode.so
   ${acados_lib}/libacados.so
   )
+
+target_link_libraries(${control_executable_name} ${library_name})
 
 ament_target_dependencies(${library_name} ${dependencies})
 
