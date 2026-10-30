@@ -92,6 +92,7 @@ Navigation goals go to `planning_manager`. Takeoff and landing remain control-ma
 | Input | `/uav1/control_manager/diagnostics` | `laser_msgs/msg/UavControlDiagnostics` | Control inputs for model prediction. |
 | Input | `/uav1/px4_api/garmin` | `sensor_msgs/msg/Range` | Optional height measurement. |
 | Output | `/uav1/estimation_manager/estimation` | `nav_msgs/msg/Odometry` | Estimated state for control. |
+| Output | `/uav1/estimation_manager/path` | `nav_msgs/msg/Path` | Recent measured/estimated flight path for visualization. |
 | Output | `/uav1/estimation_manager/diagnostics` | `laser_msgs/msg/EstimationManagerDiagnostics` | Initialization, source status and buffer/timeout diagnostics. |
 | Service | `/uav1/estimation_manager/set_odometry` | `laser_msgs/srv/SetString` | Selects an odometry source through the request's `data` field. |
 
@@ -157,6 +158,7 @@ MINCO and PMM accept a per-mission speed override; MINCO rejects speeds above `m
 | Parameter | Meaning |
 | --- | --- |
 | `frequency` | Estimation rate in Hz; supplied value is `100.0`. |
+| `path.max_poses` | Maximum path history size; default `5000` poses sampled at up to 10 Hz. |
 | `initial_odometry_source` | Startup source: `px4_api_odom`, `openvins_odom` or `fast_lio_odom`. |
 | `odometry_source_names` | Names of the available odometry sources. |
 | `odometry_switch_distance_threshold` | Position-difference threshold in metres when switching sources. |
@@ -167,6 +169,8 @@ MINCO and PMM accept a per-mission speed override; MINCO rejects speeds above `m
 | `<source>_timeout` | Time without a measurement before that source times out, in seconds. |
 | `<source>_covariance` | Configured covariance value for the sensor inputs that provide this parameter. |
 | `estimation_verbosity`, `ekf_verbosity` | Manager and filter logging levels. |
+
+The path uses the odometry actually published by estimation, including direct OpenVINS and PX4 fallback output. Add a **Path** display in RViz and select `/<uav>/estimation_manager/path` to compare it with the control reference. Its frame and pose timestamps come from odometry. A frame change, clock reset or lifecycle cleanup clears the history; old poses are removed at `path.max_poses`.
 
 For OpenVINS, check the tuning filename: the estimator repository contains `mekf_openvins_state_estimator .yaml` with a space, while the launch requests the name without that space.
 
@@ -200,6 +204,8 @@ Estimation accepts `params_file`, `uav_params_file` and `use_sim_time`. Use `ros
 ## Reference timing and holds
 
 All managers must use the same ROS clock and coordinate frame. A `ReferenceHorizon` carries its publication stamp, an absolute trajectory start time and strictly increasing sample offsets. Control interpolates the samples onto its `N + 1` prediction states using linear interpolation and quaternion slerp. It requires coverage of the full horizon and does not extrapolate.
+
+With `use_sim_time=true`, manager timers and reference/control-state/odometry/SUPER watchdogs follow `/clock`. Pausing Gazebo freezes trajectory progress and watchdog ages, so a wall-time stall does not abort the mission. Watchdogs still expire if simulation time advances without fresh data. With `use_sim_time=false`, timers and watchdogs use monotonic time, preserving real-UAV failure detection. Planning computation metrics continue to measure wall time.
 
 The first valid odometry initializes the commanded reference. After that, odometry is feedback: local maneuvers and safety holds start from the last commanded reference. Missing, stale or incomplete windows cause a hold; a new mission ID is required to resume after timeout or cancellation. Takeoff and landing reject navigation windows. Flight IDs prevent a previous flight's trajectory from being reused.
 

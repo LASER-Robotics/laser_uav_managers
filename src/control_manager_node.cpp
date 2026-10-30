@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <rclcpp/create_timer.hpp>
 
 namespace laser_uav_managers
 {
@@ -236,6 +237,8 @@ CallbackReturn ControlManagerNode::on_shutdown(const rclcpp_lifecycle::State &)
 void ControlManagerNode::get_parameters()
 {
   rclcpp::Parameter aux;
+  timeout_clock_ = get_parameter("use_sim_time").as_bool() ?
+    get_clock() : std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME);
 
   get_parameter("rate.external_loop_control", rate_external_loop_control_);
   get_parameter("rate.internal_loop_control", rate_internal_loop_control_);
@@ -418,18 +421,18 @@ void ControlManagerNode::configure_timers()
 {
   RCLCPP_INFO(get_logger(), "Configuring timers");
 
-  tmr_external_loop_control_ = create_wall_timer(
-    std::chrono::duration<double>(1.0 / rate_external_loop_control_),
+  tmr_external_loop_control_ = rclcpp::create_timer(
+    this, timeout_clock_, rclcpp::Duration::from_seconds(1.0 / rate_external_loop_control_),
     std::bind(&ControlManagerNode::external_loop_timer_callback, this));
 
   if (!angular_rates_and_thrust_mode_) {
-    tmr_internal_loop_control_ = create_wall_timer(
-      std::chrono::duration<double>(1.0 / rate_internal_loop_control_),
+    tmr_internal_loop_control_ = rclcpp::create_timer(
+      this, timeout_clock_, rclcpp::Duration::from_seconds(1.0 / rate_internal_loop_control_),
       std::bind(&ControlManagerNode::internal_loop_timer_callback, this));
   }
 
-  tmr_diagnostics_ = create_wall_timer(
-    std::chrono::duration<double>(1.0 / rate_diagnostics_),
+  tmr_diagnostics_ = rclcpp::create_timer(
+    this, timeout_clock_, rclcpp::Duration::from_seconds(1.0 / rate_diagnostics_),
     std::bind(&ControlManagerNode::diagnostics_timer_callback, this));
 }
 
@@ -617,7 +620,7 @@ void ControlManagerNode::reference_horizon_callback(const ReferenceHorizon & msg
   latest_reference_ = msg;
   accepted_mission_id_ = msg.mission_id;
   have_external_reference_ = true;
-  last_reference_rx_ = std::chrono::steady_clock::now();
+  last_reference_rx_ = timeout_clock_->now();
 }
 
 bool ControlManagerNode::validate_reference_horizon(
@@ -947,13 +950,17 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
     build_vertical_horizon(now, current_horizon_path_);
   } else if (takeoff_done_) {
     if (have_external_reference_) {
-      const double age =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - last_reference_rx_)
-          .count();
+      const double age = (timeout_clock_->now() - last_reference_rx_).seconds();
       const double elapsed = (now - rclcpp::Time(latest_reference_.start_time)).seconds();
+      const bool expired = age < 0.0 ||
+        (!latest_reference_.terminal && age > reference_timeout_sec_);
       if (
-        (!latest_reference_.terminal && age > reference_timeout_sec_) ||
+        expired ||
         !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_)) {
+        RCLCPP_WARN(
+          get_logger(), "Mission %lu hold | reason=%s | reference_age=%.3f s",
+          static_cast<unsigned long>(accepted_mission_id_),
+          expired ? "reference timeout or clock reset" : "incomplete reference window", age);
         latch_reference_hold();
         build_hold_horizon(hold_reference_, current_horizon_path_);
       } else {
