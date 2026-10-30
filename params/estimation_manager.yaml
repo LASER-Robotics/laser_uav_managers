@@ -1,6 +1,8 @@
 /**/**:
   ros__parameters:
     frequency: 100.0 # Hz
+    path:
+      max_poses: 5000 # most recent poses, sampled at up to 10 Hz
 
     odometry_switch_distance_threshold: 0.5 # meters
     odometry_switch_angle_threshold: 0.1 # radians

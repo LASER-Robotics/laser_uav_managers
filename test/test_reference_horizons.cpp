@@ -86,7 +86,18 @@ struct ControlManagerNodeTestAccess
   static uint64_t flight(const ControlManagerNode & node) {return node.flight_id_;}
   static void age(ControlManagerNode & node)
   {
-    node.last_reference_rx_ = std::chrono::steady_clock::now() - std::chrono::seconds(10);
+    node.last_reference_rx_ = node.timeout_clock_->now() - rclcpp::Duration::from_seconds(10.0);
+  }
+  static void simulation(ControlManagerNode & node)
+  {
+    ASSERT_TRUE(node.set_parameter(rclcpp::Parameter("use_sim_time", true)).successful);
+    node.get_parameters();
+    set_time(node, 120.0);
+  }
+  static void timers(ControlManagerNode & node) {node.configure_timers();}
+  static bool timer_ready(ControlManagerNode & node)
+  {
+    return node.tmr_external_loop_control_->is_ready();
   }
   static bool has_external(const ControlManagerNode & node) {return node.have_external_reference_;}
   static bool rmse_active(const ControlManagerNode & node) {return node.rmse_run_active_;}
@@ -237,8 +248,13 @@ struct PlanningManagerNodeTestAccess
   }
   static void age_super(PlanningManagerNode & node)
   {
-    node.super_last_rx_ = PlanningManagerNode::SteadyClock::now() - std::chrono::seconds(10);
+    node.super_last_rx_ = node.timeout_clock_->now() - rclcpp::Duration::from_seconds(10.0);
   }
+  static void planning_timeout(PlanningManagerNode & node, double timeout)
+  {
+    node.planning_timeout_ = timeout;
+  }
+  static bool timer_ready(PlanningManagerNode & node) {return node.timer_->is_ready();}
   static void cancel(PlanningManagerNode & node) {node.abort_mission("test cancellation");}
   static double end_time(const PlanningManagerNode & node)
   {
@@ -253,7 +269,7 @@ struct PlanningManagerNodeTestAccess
   {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (node.generation_.valid() && std::chrono::steady_clock::now() < deadline) {
-      node.control_rx_ = node.odometry_rx_ = PlanningManagerNode::SteadyClock::now();
+      node.control_rx_ = node.odometry_rx_ = node.timeout_clock_->now();
       node.timer_callback();
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
@@ -352,10 +368,11 @@ protected:
     msg.coef_pos_z = {0.0, 1.5};
     return msg;
   }
-  void planner(const std::string & backend)
+  void planner(const std::string & backend, bool use_sim_time = false)
   {
     rclcpp::NodeOptions options;
-    options.parameter_overrides({rclcpp::Parameter("planner", backend)});
+    options.parameter_overrides({rclcpp::Parameter("planner", backend),
+      rclcpp::Parameter("use_sim_time", use_sim_time)});
     options.arguments(
       {"--ros-args", "--params-file", TEST_UAV_CONFIG_PATH,
         "--params-file", TEST_PLANNER_CONFIG_PATH, "-r", "__ns:=/laser_reference_test"});
@@ -1354,5 +1371,106 @@ TEST_F(ReferenceHorizonsTest, SuperNewestGotoDiscardsThePreviousPendingReplaceme
   Planning::receive(*planning, replacement);
   EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
   EXPECT_EQ(planning_tick().mission_id, latest);
+}
+}  // namespace laser_uav_managers
+
+namespace laser_uav_managers
+{
+class SimulationPauseTest : public ReferenceHorizonsTest,
+  public testing::WithParamInterface<const char *> {};
+
+TEST_P(SimulationPauseTest, PausedClockKeepsMissionAndReferenceAliveThenResumes)
+{
+  Access::simulation(*node);
+  Access::timers(*node);
+  hover();
+  planner(GetParam(), true);
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  if (std::string(GetParam()) == "super") {
+    Planning::receive(*planning, polynomial());
+  } else {
+    Planning::wait(*planning);
+  }
+  const auto before = planning_tick();
+  Access::receive(*node, before);
+  const auto held = Access::tick(*node, 120.0);
+  ASSERT_TRUE(Access::has_external(*node));
+  std::this_thread::sleep_for(std::chrono::milliseconds(600));
+  EXPECT_FALSE(Access::timer_ready(*node));
+  EXPECT_FALSE(Planning::timer_ready(*planning));
+  Planning::tick(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_EQ(Access::tick(*node, 120.0), held);
+  EXPECT_TRUE(Access::has_external(*node));
+  set_time(*planning, 120.01);
+  set_time(*node, 120.01);
+  Access::receive(*node, planning_tick());
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+  EXPECT_EQ(Planning::mission(*planning), before.mission_id);
+  EXPECT_EQ(Access::tick(*node, 120.01).size(), held.size());
+  EXPECT_TRUE(Access::has_external(*node));
+}
+
+INSTANTIATE_TEST_SUITE_P(Backends, SimulationPauseTest, testing::Values("pmm", "minco", "super"));
+
+TEST_F(ReferenceHorizonsTest, SimulationStillTimesOutWhenClockAdvancesWithoutData)
+{
+  Access::simulation(*node);
+  hover();
+  planner("pmm", true);
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  Access::receive(*node, planning_tick());
+  Access::tick(*node, 120.0);
+  set_time(*node, 120.6);
+  set_time(*planning, 120.6);
+  Access::tick(*node, 120.6);
+  Planning::tick(*planning);
+  EXPECT_FALSE(Access::has_external(*node));
+  EXPECT_EQ(Planning::state(*planning), Status::ABORTED);
+}
+
+TEST_F(ReferenceHorizonsTest, RealWatchdogsExpireEvenWithAFrozenRosClock)
+{
+  hover();
+  planner("pmm");
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  Access::receive(*node, planning_tick());
+  Access::tick(*node, 120.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(600));
+  Access::tick(*node, 120.0);
+  Planning::tick(*planning);
+  EXPECT_FALSE(Access::has_external(*node));
+  EXPECT_EQ(Planning::state(*planning), Status::ABORTED);
+}
+
+TEST_F(ReferenceHorizonsTest, SimulationPlanningDeadlinePausesButStillExpiresInSimulationTime)
+{
+  Access::simulation(*node);
+  hover();
+  planner("minco", true);
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  auto worker = Planning::delayed_worker(*planning);
+  Planning::planning_timeout(*planning, 0.1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  Planning::tick(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::GENERATING);
+  set_time(*planning, 120.2);
+  Planning::tick(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::FAILED);
+}
+
+TEST_F(ReferenceHorizonsTest, SimulationSuperHeartbeatExpiresWhenSimulationTimeAdvances)
+{
+  Access::simulation(*node);
+  hover();
+  planner("super", true);
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::receive(*planning, polynomial());
+  set_time(*planning, 120.6);
+  Planning::ready(*planning, Access::flight(*node));
+  Planning::tick(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::ABORTED);
 }
 }  // namespace laser_uav_managers

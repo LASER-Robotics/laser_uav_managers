@@ -24,6 +24,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 
 #include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/path.hpp>
 
 #include <laser_msgs/msg/estimation_manager_diagnostics.hpp>
 #include <laser_msgs/msg/motor_speed_stamped.hpp>
@@ -69,6 +70,7 @@ public:
   ~EstimationManager() override;
 
 private:
+  friend struct EstimationManagerTestAccess;
   /* CONFIG //{ */
   CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
   CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
@@ -105,6 +107,7 @@ private:
   void publish_odometry(
     rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr pub,
     rclcpp::Time & pub_time);
+  void publish_odometry_path(const nav_msgs::msg::Odometry & msg);
 
   template <typename MsgT>
   bool is_buffer_valid(
@@ -120,6 +123,9 @@ private:
 
   /* ROS COMMUNICATIONS //{ */
   rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr odometry_path_pub_;
+  nav_msgs::msg::Path odometry_path_;
+  int path_max_poses_{5000};
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::EstimationManagerDiagnostics>::SharedPtr
     diagnostics_pub_;
 

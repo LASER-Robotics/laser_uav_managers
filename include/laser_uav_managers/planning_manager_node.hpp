@@ -105,12 +105,14 @@ private:
   laser_msgs::msg::ReferenceState super_hold_;
   rclcpp::Time super_goal_time_{0, 0, RCL_ROS_TIME};
   SteadyClock::time_point generation_started_{};
-  SteadyClock::time_point super_last_rx_{};
+  rclcpp::Clock::SharedPtr timeout_clock_{std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME)};
+  rclcpp::Time planning_started_{0, 0, RCL_STEADY_TIME};
+  rclcpp::Time super_last_rx_{0, 0, RCL_STEADY_TIME};
   std::optional<SteadyClock::time_point> last_publication_;
   std::optional<ControlState> control_;
   std::optional<nav_msgs::msg::Odometry> odometry_;
-  SteadyClock::time_point control_rx_{};
-  SteadyClock::time_point odometry_rx_{};
+  rclcpp::Time control_rx_{0, 0, RCL_STEADY_TIME};
+  rclcpp::Time odometry_rx_{0, 0, RCL_STEADY_TIME};
   rclcpp::Time plan_start_{0, 0, RCL_ROS_TIME};
 
   pmm_planner::multirotor_t physical_;
