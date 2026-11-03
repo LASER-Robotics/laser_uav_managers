@@ -10,9 +10,8 @@
 #include <limits>
 #include <stdexcept>
 
-#include <rclcpp/create_timer.hpp>
-
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <rclcpp/create_timer.hpp>
 
 namespace laser_uav_managers
 {
@@ -238,9 +237,8 @@ CallbackReturn ControlManagerNode::on_shutdown(const rclcpp_lifecycle::State &)
 void ControlManagerNode::get_parameters()
 {
   rclcpp::Parameter aux;
-  timeout_clock_ = get_parameter("use_sim_time").as_bool()
-                     ? get_clock()
-                     : std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME);
+  timeout_clock_ = get_parameter("use_sim_time").as_bool() ?
+    get_clock() : std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME);
 
   get_parameter("rate.external_loop_control", rate_external_loop_control_);
   get_parameter("rate.internal_loop_control", rate_internal_loop_control_);
@@ -954,9 +952,11 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
     if (have_external_reference_) {
       const double age = (timeout_clock_->now() - last_reference_rx_).seconds();
       const double elapsed = (now - rclcpp::Time(latest_reference_.start_time)).seconds();
-      const bool expired =
-        age < 0.0 || (!latest_reference_.terminal && age > reference_timeout_sec_);
-      if (expired || !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_)) {
+      const bool expired = age < 0.0 ||
+        (!latest_reference_.terminal && age > reference_timeout_sec_);
+      if (
+        expired ||
+        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_)) {
         RCLCPP_WARN(
           get_logger(), "Mission %lu hold | reason=%s | reference_age=%.3f s",
           static_cast<unsigned long>(accepted_mission_id_),

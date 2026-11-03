@@ -411,11 +411,14 @@ protected:
     msg.coef_pos_z = {0.0, 1.5};
     return msg;
   }
-  void planner(const std::string & backend, bool use_sim_time = false)
+  void planner(
+    const std::string & backend, bool use_sim_time = false, double minco_sampling_step = 0.01)
   {
     rclcpp::NodeOptions options;
-    options.parameter_overrides({rclcpp::Parameter("planner", backend),
-      rclcpp::Parameter("use_sim_time", use_sim_time)});
+    options.parameter_overrides(
+      {rclcpp::Parameter("planner", backend),
+        rclcpp::Parameter("use_sim_time", use_sim_time),
+        rclcpp::Parameter("minco.sampling_step", minco_sampling_step)});
     options.arguments(
       {"--ros-args", "--params-file", TEST_UAV_CONFIG_PATH,
         "--params-file", TEST_PLANNER_CONFIG_PATH, "-r", "__ns:=/laser_reference_test"});
@@ -1142,6 +1145,33 @@ TEST_F(ReferenceHorizonsTest, MincoLongCircuitPublishesOnlyTheCurrentPredictionW
     EXPECT_EQ(msg.terminal, elapsed >= plan.times.back());
     EXPECT_TRUE(Access::validate(*node, msg));
   }
+}
+
+TEST_F(ReferenceHorizonsTest, MincoRejectsExcessivePolynomialPiecesAndAcceptsTheNextMission)
+{
+  hover();
+  planner("minco");
+  ASSERT_TRUE(Planning::goal(*planning, 40000.0));
+  Planning::wait(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::FAILED);
+  EXPECT_FALSE(Planning::has_plan(*planning));
+  Planning::tick(*planning);
+  rclcpp::spin_some(observer);
+  EXPECT_FALSE(published.has_value());
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  EXPECT_EQ(Planning::state(*planning), Status::TRACKING);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoRejectsAnOversizedPredictionWindowWithoutPublishing)
+{
+  hover();
+  planner("minco", false, 1e-6);
+  ASSERT_TRUE(Planning::goal(*planning, 3.0));
+  Planning::wait(*planning);
+  rclcpp::spin_some(observer);
+  EXPECT_FALSE(published.has_value());
+  EXPECT_EQ(Planning::state(*planning), Status::FAILED);
 }
 
 TEST_F(ReferenceHorizonsTest, MincoYawOnlyUsesTheShortestRotationAcrossPi)
