@@ -104,3 +104,18 @@ def test_control_launch_maps_reference_path(planning_launch):
     }
     assert remappings['/uav1/reference_path_out'] == '/uav1/control_manager/reference_path'
     assert '/uav1/reference_horizon_out' not in remappings
+
+
+def test_estimation_launch_maps_odometry_path(planning_launch):
+    _, context, _ = planning_launch
+    source = Path(__file__).resolve().parents[1] / 'launch' / 'estimation_manager.launch.py'
+    spec = importlib.util.spec_from_file_location('estimation_launch', source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    description = module.generate_launch_description()
+    node = next(a for a in description.entities if isinstance(a, LifecycleNode))
+    remappings = {
+        perform_substitutions(context, source): perform_substitutions(context, target)
+        for source, target in node._Node__remappings
+    }
+    assert remappings['odometry_path_out'] == 'estimation_manager/path'

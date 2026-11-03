@@ -158,6 +158,13 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_reference_horizons ${dependencies} ${planning_dependencies})
   target_link_libraries(test_reference_horizons ${library_name} ${planning_library_name})
 
+  ament_add_gtest(test_estimation_path test/test_estimation_path.cpp)
+  target_compile_definitions(test_estimation_path PRIVATE
+    TEST_ESTIMATION_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/estimation_manager.yaml"
+    TEST_UAV_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/params/laser_uavs/x500.yaml")
+  ament_target_dependencies(test_estimation_path ${dependencies})
+  target_link_libraries(test_estimation_path ${estimation_library_name})
+
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)

@@ -1,5 +1,6 @@
 #include <laser_uav_managers/planning_manager_node.hpp>
 #include <traj_opt/minco.h>
+#include <rclcpp/create_timer.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -466,6 +467,8 @@ PlanningManagerNode::PlanningManagerNode(const rclcpp::NodeOptions & options)
 
 void PlanningManagerNode::read_parameters()
 {
+  timeout_clock_ = get_parameter("use_sim_time").as_bool() ?
+    get_clock() : std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME);
   get_parameter("planner", planner_);
   get_parameter("rate.reference_horizon", publish_rate_);
   get_parameter("control_state_timeout", state_timeout_);
@@ -615,11 +618,11 @@ PlanningManagerNode::CallbackReturn PlanningManagerNode::on_configure(
         "super_trajectory_in", stream_qos,
         std::bind(&PlanningManagerNode::super_trajectory_callback, this, std::placeholders::_1));
     }
-    timer_ = create_wall_timer(
-      std::chrono::duration<double>(1.0 / publish_rate_),
+    timer_ = rclcpp::create_timer(
+      this, timeout_clock_, rclcpp::Duration::from_seconds(1.0 / publish_rate_),
       std::bind(&PlanningManagerNode::timer_callback, this));
-    diagnostics_timer_ = create_wall_timer(
-      std::chrono::milliseconds(100),
+    diagnostics_timer_ = rclcpp::create_timer(
+      this, timeout_clock_, rclcpp::Duration::from_seconds(0.1),
       std::bind(&PlanningManagerNode::publish_status, this));
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_logger(), "Planning configuration failed: %s", e.what());
@@ -693,7 +696,8 @@ PlanningManagerNode::CallbackReturn PlanningManagerNode::on_shutdown(
 bool PlanningManagerNode::control_is_fresh() const
 {
   return control_ && control_->ready_for_tracking && control_->flight_id != 0 &&
-         SteadyClock::now() - control_rx_ < std::chrono::duration<double>(state_timeout_);
+         timeout_clock_->now() >= control_rx_ &&
+         (timeout_clock_->now() - control_rx_).seconds() < state_timeout_;
 }
 
 void PlanningManagerNode::control_state_callback(const ControlState & msg)
@@ -718,7 +722,7 @@ void PlanningManagerNode::control_state_callback(const ControlState & msg)
     plan_mission_id_ = 0;
   }
   control_ = msg;
-  control_rx_ = SteadyClock::now();
+  control_rx_ = timeout_clock_->now();
 }
 
 void PlanningManagerNode::odometry_callback(const nav_msgs::msg::Odometry & msg)
@@ -730,7 +734,7 @@ void PlanningManagerNode::odometry_callback(const nav_msgs::msg::Odometry & msg)
     Eigen::Quaterniond(q.w, q.x, q.y, q.z).norm() > 1e-9)
   {
     odometry_ = msg;
-    odometry_rx_ = SteadyClock::now();
+    odometry_rx_ = timeout_clock_->now();
   }
 }
 
@@ -770,7 +774,7 @@ void PlanningManagerNode::reject(const std::string & reason)
 bool PlanningManagerNode::start_mission(const std::vector<Goal> & goals, double speed, bool stop)
 {
   if (!active_ || !control_is_fresh() || !odometry_ ||
-    SteadyClock::now() - odometry_rx_ > std::chrono::duration<double>(state_timeout_) ||
+    (timeout_clock_->now() - odometry_rx_).seconds() > state_timeout_ ||
     odometry_->header.frame_id != control_->header.frame_id)
   {
     reject("fresh control state and odometry in the same frame are required");
@@ -839,6 +843,7 @@ void PlanningManagerNode::start_segment()
   mission_state_ = Status::GENERATING;
   detail_.clear();
   generation_started_ = SteadyClock::now();
+  planning_started_ = timeout_clock_->now();
   if (planner_ == "super") {
     super_hold_ = hold_at(control_->reference);
     if (!have_super_trajectory_) {
@@ -1010,7 +1015,7 @@ void PlanningManagerNode::super_trajectory_callback(const Polynomial & msg)
     plan_mission_id_ = mission_.id;
     plan_flight_id_ = mission_.flight_id;
     plan_final_ = mission_.index + 1 == mission_.goals.size();
-    super_last_rx_ = SteadyClock::now();
+    super_last_rx_ = timeout_clock_->now();
     planning_duration_ms_ = std::chrono::duration<double, std::milli>(
       SteadyClock::now() - generation_started_).count();
     mission_state_ = Status::TRACKING;
@@ -1021,7 +1026,7 @@ void PlanningManagerNode::super_trajectory_callback(const Polynomial & msg)
       msg.piece_num_pos, planning_duration_ms_);
     publish_status();
   } else if ((msg.type & Polynomial::HEART_BEAT) != 0 && matches_super_trajectory(msg)) {
-    super_last_rx_ = SteadyClock::now();
+    super_last_rx_ = timeout_clock_->now();
   }
 }
 
@@ -1042,7 +1047,7 @@ void PlanningManagerNode::timer_callback()
     return;
   }
   if (!control_is_fresh() || !odometry_ ||
-    SteadyClock::now() - odometry_rx_ > std::chrono::duration<double>(state_timeout_))
+    (timeout_clock_->now() - odometry_rx_).seconds() > state_timeout_)
   {
     if (mission_.active) {
       abort_mission("control state or odometry timeout");
@@ -1050,7 +1055,7 @@ void PlanningManagerNode::timer_callback()
     return;
   }
   if (mission_.active && mission_state_ == Status::GENERATING &&
-    SteadyClock::now() - generation_started_ > std::chrono::duration<double>(planning_timeout_))
+    (timeout_clock_->now() - planning_started_).seconds() > planning_timeout_)
   {
     abort_mission("planning deadline exceeded", Status::FAILED);
     return;
@@ -1125,7 +1130,7 @@ void PlanningManagerNode::timer_callback()
   } else if (planner_ == "super" && plan_mission_id_ != 0) {
     if (have_super_trajectory_) {
       if (now.seconds() < super_end_time() &&
-        SteadyClock::now() - super_last_rx_ > std::chrono::duration<double>(super_timeout_))
+        (timeout_clock_->now() - super_last_rx_).seconds() > super_timeout_)
       {
         abort_mission("SUPER heartbeat timeout");
         return;

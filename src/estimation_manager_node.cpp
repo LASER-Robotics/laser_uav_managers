@@ -1,6 +1,12 @@
 #include <rclcpp_components/register_node_macro.hpp>
 
 #include <laser_uav_managers/estimation_manager_node.hpp>
+#include <rclcpp/create_timer.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <stdexcept>
 
 namespace laser_uav_managers
 {
@@ -13,6 +19,7 @@ EstimationManager::EstimationManager(const rclcpp::NodeOptions & options)
 
   declare_parameter("uav_name", "uav");
   declare_parameter("frequency", 100.0);
+  declare_parameter("path.max_poses", 5000);
   declare_parameter("initial_odometry_source", "px4_api_odom");
   declare_parameter("odometry_source_names", std::vector<std::string>{});
   declare_parameter("odometry_switch_distance_threshold", 0.25);
@@ -124,6 +131,7 @@ CallbackReturn EstimationManager::on_activate(const rclcpp_lifecycle::State & /*
 {
   RCLCPP_INFO(get_logger(), "Activating EstimationManager...");
   odom_pub_->on_activate();
+  odometry_path_pub_->on_activate();
   diagnostics_pub_->on_activate();
 
   is_active_ = true;
@@ -141,6 +149,7 @@ CallbackReturn EstimationManager::on_deactivate(const rclcpp_lifecycle::State & 
   timer_->cancel();
   diagnostics_timer_->cancel();
   odom_pub_->on_deactivate();
+  odometry_path_pub_->on_deactivate();
   diagnostics_pub_->on_deactivate();
   return CallbackReturn::SUCCESS;
 }
@@ -151,6 +160,8 @@ CallbackReturn EstimationManager::on_cleanup(const rclcpp_lifecycle::State & /*s
 {
   RCLCPP_INFO(get_logger(), "Cleaning up EstimationManager...");
   odom_pub_.reset();
+  odometry_path_pub_.reset();
+  odometry_path_ = nav_msgs::msg::Path();
   diagnostics_pub_.reset();
   odometry_px4_sub_.reset();
   odometry_fast_lio_sub_.reset();
@@ -178,6 +189,10 @@ void EstimationManager::get_parameters()
   RCLCPP_INFO(get_logger(), "Loading parameters...");
   get_parameter("uav_name", uav_name_);
   get_parameter("frequency", frequency_);
+  get_parameter("path.max_poses", path_max_poses_);
+  if (path_max_poses_ <= 0) {
+    throw std::invalid_argument("path.max_poses must be positive");
+  }
   get_parameter("initial_odometry_source", current_active_odometry_name_);
   get_parameter("odometry_source_names", odometry_source_names_);
   get_parameter("odometry_switch_distance_threshold", odometry_switch_distance_threshold_);
@@ -314,6 +329,8 @@ void EstimationManager::setup_pub_sub()
 {
   RCLCPP_INFO(get_logger(), "Configuring publishers and subscribers...");
   odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odometry_out", 10);
+  odometry_path_pub_ = create_publisher<nav_msgs::msg::Path>(
+    "odometry_path_out", rclcpp::QoS(1).reliable().transient_local());
   diagnostics_pub_ =
     create_publisher<laser_msgs::msg::EstimationManagerDiagnostics>("~/diagnostics", 10);
 
@@ -340,11 +357,13 @@ void EstimationManager::setup_pub_sub()
 void EstimationManager::setup_timers()
 {
   RCLCPP_INFO(get_logger(), "Configuring timers...");
-  timer_ = create_wall_timer(
-    std::chrono::duration<double>(1.0 / frequency_),
+  auto timer_clock = get_parameter("use_sim_time").as_bool() ?
+    get_clock() : std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME);
+  timer_ = rclcpp::create_timer(
+    this, timer_clock, rclcpp::Duration::from_seconds(1.0 / frequency_),
     std::bind(&EstimationManager::timer_callback, this));
-  diagnostics_timer_ = create_wall_timer(
-    std::chrono::duration<double>(1.0 / (frequency_ / 10.0)),
+  diagnostics_timer_ = rclcpp::create_timer(
+    this, timer_clock, rclcpp::Duration::from_seconds(10.0 / frequency_),
     std::bind(&EstimationManager::diagnostics_timer_callback, this));
 
   RCLCPP_INFO(get_logger(), "Timers configured.");
@@ -435,6 +454,7 @@ void EstimationManager::odometry_open_vins_callback(const nav_msgs::msg::Odometr
     msg->header.frame_id = uav_name_ + "/odometry";
     msg->child_frame_id = uav_name_ + "/fcu";
     odom_pub_->publish(*msg);
+    publish_odometry_path(*msg);
   }
   RCLCPP_DEBUG_THROTTLE(
     get_logger(), *get_clock(), 5000,
@@ -973,6 +993,7 @@ void EstimationManager::timer_callback()
         msg->child_frame_id = uav_name_ + "/fcu";
 
         odom_pub_->publish(*msg);
+        publish_odometry_path(*msg);
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000, "OpenVins waiting for data... using PX4 fallback.");
       }
@@ -1083,6 +1104,7 @@ void EstimationManager::publish_odometry(
   odom_out_msg.header.frame_id = uav_name_ + "/odometry";
   odom_out_msg.child_frame_id = uav_name_ + "/fcu";
   pub->publish(odom_out_msg);
+  publish_odometry_path(odom_out_msg);
 
   try {
     Eigen::Quaterniond q_odom(
@@ -1108,6 +1130,46 @@ void EstimationManager::publish_odometry(
   }
 }
 //}
+
+void EstimationManager::publish_odometry_path(const nav_msgs::msg::Odometry & msg)
+{
+  if (!is_active_ || msg.header.frame_id.empty() || msg.header.stamp.sec < 0 ||
+    msg.header.stamp.nanosec >= 1000000000U)
+  {
+    return;
+  }
+  const auto & p = msg.pose.pose.position;
+  const auto & q = msg.pose.pose.orientation;
+  const std::array<double, 7> pose{p.x, p.y, p.z, q.w, q.x, q.y, q.z};
+  const double norm = Eigen::Quaterniond(q.w, q.x, q.y, q.z).norm();
+  if (!std::all_of(pose.begin(), pose.end(), [](double value) {return std::isfinite(value);}) ||
+    !std::isfinite(norm) || norm < 1e-9)
+  {
+    return;
+  }
+  const auto stamp = rclcpp::Time(msg.header.stamp);
+  if (!odometry_path_.poses.empty() &&
+    (odometry_path_.header.frame_id != msg.header.frame_id ||
+    stamp < rclcpp::Time(odometry_path_.header.stamp)))
+  {
+    odometry_path_.poses.clear();
+  }
+  // Keep visualization at most 10 Hz, independently of the odometry rate.
+  if (!odometry_path_.poses.empty() &&
+    (stamp - rclcpp::Time(odometry_path_.header.stamp)).seconds() < 0.1)
+  {
+    return;
+  }
+  if (odometry_path_.poses.size() >= static_cast<std::size_t>(path_max_poses_)) {
+    odometry_path_.poses.erase(odometry_path_.poses.begin());
+  }
+  geometry_msgs::msg::PoseStamped pose_stamped;
+  pose_stamped.header = msg.header;
+  pose_stamped.pose = msg.pose.pose;
+  odometry_path_.header = msg.header;
+  odometry_path_.poses.push_back(pose_stamped);
+  odometry_path_pub_->publish(odometry_path_);
+}
 
 }  // namespace laser_uav_managers
 

@@ -114,6 +114,7 @@ def generate_launch_description():
             ('control_in', 'control_manager/diagnostics'),
             ('garmin_in', 'px4_api/garmin'),
             ('odometry_out', 'estimation_manager/estimation'),
+            ('odometry_path_out', 'estimation_manager/path'),
             ('odometry_predict', 'estimation_manager/estimation_predict'),
             ('set_odometry', 'set_odometry'),
             ('diagnostics', 'estimation_manager/diagnostics'),

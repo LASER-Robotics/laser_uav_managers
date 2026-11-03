@@ -209,7 +209,8 @@ private:
   uint64_t flight_id_{0};
   uint64_t accepted_mission_id_{0};
   uint64_t closed_mission_id_{0};
-  std::chrono::steady_clock::time_point last_reference_rx_{};
+  rclcpp::Clock::SharedPtr timeout_clock_{std::make_shared<rclcpp::Clock>(RCL_STEADY_TIME)};
+  rclcpp::Time last_reference_rx_{0, 0, RCL_STEADY_TIME};
 
   // RMSE
   laser_uav_lib::RMSE estimated_rmse_;
