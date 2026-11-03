@@ -509,6 +509,20 @@ TEST_F(ReferenceHorizonsTest, TimeoutLatchesLastCommandAndRequiresNewMission)
   EXPECT_DOUBLE_EQ(Access::tick(*node, 123.0).front().pose.position.x, 2.5);
 }
 
+TEST_F(ReferenceHorizonsTest, FrozenRosClockDoesNotRefreshTheWatchdogWithDuplicateWindows)
+{
+  hover();
+  auto msg = window();
+  Access::receive(*node, msg);
+  const auto tracking = Access::tick(*node, 120.0);
+  Access::age(*node);
+  Access::receive(*node, msg);
+  const auto held = Access::tick(*node, 120.0);
+  EXPECT_FALSE(Access::has_external(*node));
+  EXPECT_EQ(held.front().pose, tracking.front().pose);
+  EXPECT_DOUBLE_EQ(held.front().twist.linear.x, 0.0);
+}
+
 TEST_F(ReferenceHorizonsTest, MissingFutureCoverageHoldsCommandWithoutExtrapolation)
 {
   hover();

@@ -951,9 +951,23 @@ bool ControlManagerNode::update_reference_horizon(const rclcpp::Time & now)
         std::chrono::duration<double>(std::chrono::steady_clock::now() - last_reference_rx_)
           .count();
       const double elapsed = (now - rclcpp::Time(latest_reference_.start_time)).seconds();
-      if (
-        (!latest_reference_.terminal && age > reference_timeout_sec_) ||
-        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_)) {
+      const bool expired = !latest_reference_.terminal && age > reference_timeout_sec_;
+      if (expired ||
+        !sample_reference_horizon(latest_reference_, elapsed, current_horizon_path_))
+      {
+        const char * reason = expired ? "reference_timeout" :
+          (elapsed < latest_reference_.time_from_start.front() - 1e-6 ?
+          "window_not_started" : "window_exhausted");
+        RCLCPP_ERROR(
+          get_logger(),
+          "Entering reference hold | reason=%s | mission=%lu | wall_age=%.6f s | "
+          "timeout=%.6f s | ros_now=%.9f s | publication=%.9f s | elapsed=%.9f s | "
+          "window=[%.9f, %.9f] s | required_end=%.9f s | terminal=%s",
+          reason, static_cast<unsigned long>(accepted_mission_id_), age, reference_timeout_sec_,
+          now.seconds(), rclcpp::Time(latest_reference_.header.stamp).seconds(), elapsed,
+          latest_reference_.time_from_start.front(), latest_reference_.time_from_start.back(),
+          elapsed + acados_params_.N * acados_params_.dt,
+          latest_reference_.terminal ? "yes" : "no");
         latch_reference_hold();
         build_hold_horizon(hold_reference_, current_horizon_path_);
       } else {
