@@ -143,7 +143,8 @@ struct PlanningManagerNodeTestAccess
         rclcpp_lifecycle::State()), PlanningManagerNode::CallbackReturn::SUCCESS);
   }
   static void ready(
-    PlanningManagerNode & node, uint64_t flight, double x = 1.0, double velocity = 0.0)
+    PlanningManagerNode & node, uint64_t flight, double x = 1.0, double velocity = 0.0,
+    double y = -2.0, double z = 1.5)
   {
     laser_msgs::msg::UavControlState state;
     state.header.frame_id = "map";
@@ -153,8 +154,8 @@ struct PlanningManagerNodeTestAccess
     state.horizon_dt = 0.05;
     state.estimated_mass = 2.0;
     state.reference.pose.position.x = x;
-    state.reference.pose.position.y = -2.0;
-    state.reference.pose.position.z = 1.5;
+    state.reference.pose.position.y = y;
+    state.reference.pose.position.z = z;
     state.reference.pose.orientation.w = 1.0;
     state.reference.twist.linear.x = velocity;
     state.reference.use_position = state.reference.use_orientation = true;
@@ -184,7 +185,49 @@ struct PlanningManagerNodeTestAccess
       node.goto_callback(goal);
     }
   }
-  static const Horizon & refs(const PlanningManagerNode & node) {return node.plan_->states;}
+  static auto sampled(PlanningManagerNode::GeneratedPlan plan)
+  {
+    if (!plan.position.empty()) {
+      const double end = plan.times.back();
+      auto times = plan.times;
+      for (double t = 0.0; t < end; t += plan.sampling_step) {
+        times.push_back(t);
+      }
+      std::sort(times.begin(), times.end());
+      times.erase(
+        std::unique(
+          times.begin(), times.end(), [](double a, double b) {
+            return std::abs(a - b) < 1e-9;
+          }), times.end());
+      for (double t : times) {
+        plan.states.push_back(PlanningManagerNode::sample_minco(plan, t));
+      }
+      plan.times = times;
+    }
+    return plan;
+  }
+  static Horizon refs(const PlanningManagerNode & node) {return sampled(*node.plan_).states;}
+  static auto polynomial(
+    const laser_msgs::msg::ReferenceState & start,
+    const std::vector<laser_msgs::msg::PoseWithHeading> & goals, double acceleration = 2.0,
+    double step = 0.01)
+  {
+    return PlanningManagerNode::generate_minco(start, goals, 2.0, acceleration, step, 1.0);
+  }
+  static double bound(const geometry_utils::Piece & piece, int derivative)
+  {
+    return PlanningManagerNode::minco_derivative_bound(piece, derivative);
+  }
+  static auto sample(const PlanningManagerNode::GeneratedPlan & plan, double time)
+  {
+    return PlanningManagerNode::sample_minco(plan, time);
+  }
+  static bool path(
+    PlanningManagerNode & node, const std::vector<laser_msgs::msg::PoseWithHeading> & goals)
+  {
+    return node.start_mission(goals, 2.0, false);
+  }
+  static const auto & plan(const PlanningManagerNode & node) {return *node.plan_;}
   static uint64_t mission(const PlanningManagerNode & node) {return node.mission_.id;}
   static auto delayed_worker(PlanningManagerNode & node)
   {
@@ -197,7 +240,7 @@ struct PlanningManagerNodeTestAccess
     const laser_msgs::msg::ReferenceState & start,
     const std::vector<laser_msgs::msg::PoseWithHeading> & goals)
   {
-    return PlanningManagerNode::generate_minco(start, goals, 2.0, 2.0, 0.01, 1.0);
+    return sampled(polynomial(start, goals));
   }
   static bool goal(
     PlanningManagerNode & node, double x, bool stop = false, bool multiple = false,
@@ -755,7 +798,10 @@ TEST_F(ReferenceHorizonsTest, PmmWindowsKeepTheirGenerationEpochAndCoverClockSke
   set_time(*planning, 120.065);
   Planning::wait(*planning);
   const auto raw = planning_tick();
-  EXPECT_EQ(rclcpp::Time(raw.start_time).nanoseconds(), rclcpp::Time(120, 0, RCL_ROS_TIME).nanoseconds());
+  EXPECT_EQ(
+    rclcpp::Time(raw.start_time).nanoseconds(), rclcpp::Time(
+      120, 0,
+      RCL_ROS_TIME).nanoseconds());
   EXPECT_LE(raw.time_from_start.front(), 0.015);
   set_time(*node, 120.06);
   Access::receive(*node, raw);
@@ -829,7 +875,9 @@ TEST_F(ReferenceHorizonsTest, MincoMatchesTheMinimumSnapSepticAndRespectsLimits)
     if (i > 0) {
       const double dt = plan.times[i] - plan.times[i - 1];
       ASSERT_GT(dt, 0.0);
-      EXPECT_LE(std::abs(plan.states[i].twist.linear.x -
+      EXPECT_LE(
+        std::abs(
+          plan.states[i].twist.linear.x -
           plan.states[i - 1].twist.linear.x) / dt, 2.0 + 1e-5);
     }
   }
@@ -845,9 +893,10 @@ TEST_F(ReferenceHorizonsTest, MincoFlyThroughPassesTheWaypointWithoutStoppingAnd
   Planning::wait(*planning);
   ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
   const auto & refs = Planning::refs(*planning);
-  const auto middle = std::min_element(refs.begin(), refs.end(), [](const auto & a, const auto & b) {
-        return std::abs(a.pose.position.x - 2.0) < std::abs(b.pose.position.x - 2.0);
-      });
+  const auto middle = std::min_element(
+    refs.begin(), refs.end(), [](const auto & a, const auto & b) {
+      return std::abs(a.pose.position.x - 2.0) < std::abs(b.pose.position.x - 2.0);
+    });
   ASSERT_NE(middle, refs.end());
   EXPECT_NEAR(middle->pose.position.x, 2.0, 1e-8);
   EXPECT_GT(middle->twist.linear.x, 0.1);
@@ -910,6 +959,158 @@ TEST_F(ReferenceHorizonsTest, MincoGotoPreservesMovingReferenceAndRejectsExcessi
   EXPECT_NEAR(Planning::refs(*planning).front().pose.position.x, 2.0, 1e-8);
   EXPECT_NEAR(Planning::refs(*planning).front().twist.linear.x, 3.0, 1e-8);
   EXPECT_NEAR(Planning::refs(*planning).back().pose.position.x, -2.0, 1e-8);
+}
+
+TEST_F(ReferenceHorizonsTest, MincoDerivativeBoundsAcceptThe45MeterSepticAndDetectInteriorPeaks)
+{
+  const double duration = 49.5;
+  Eigen::MatrixXd coefficients = Eigen::MatrixXd::Zero(3, 8);
+  coefficients(0, 0) = -20.0 * 45.0 / std::pow(duration, 7);
+  coefficients(0, 1) = 70.0 * 45.0 / std::pow(duration, 6);
+  coefficients(0, 2) = -84.0 * 45.0 / std::pow(duration, 5);
+  coefficients(0, 3) = 35.0 * 45.0 / std::pow(duration, 4);
+  coefficients(2, 7) = 3.0;
+  const geometry_utils::Piece piece(duration, coefficients);
+  const double peak = 2.1875 * 45.0 / duration;
+  const double bound = Planning::bound(piece, 1);
+  EXPECT_GE(bound, peak - 1e-10);
+  EXPECT_NEAR(bound, peak, 1e-6);
+  EXPECT_LT(bound, 2.0);
+  EXPECT_GT(bound, 1.9);
+  EXPECT_NEAR(piece.getVel(0.0).norm(), 0.0, 1e-9);
+  EXPECT_NEAR(piece.getVel(duration).norm(), 0.0, 1e-9);
+  const double acceleration_bound = Planning::bound(piece, 2);
+  for (int j = 0; j <= 1000; ++j) {
+    EXPECT_LE(piece.getAcc(duration * j / 1000).norm(), acceleration_bound + 1e-10);
+  }
+  coefficients.setZero();
+  EXPECT_DOUBLE_EQ(Planning::bound(geometry_utils::Piece(duration, coefficients), 1), 0.0);
+}
+
+std::vector<laser_msgs::msg::PoseWithHeading> long_circuit()
+{
+  std::vector<laser_msgs::msg::PoseWithHeading> goals(1);
+  goals.front().position.z = 3.0;
+  for (int lap = 0; lap < 5; ++lap) {
+    for (const auto & xy : std::vector<std::pair<double, double>>{
+        {45.0, 0.0}, {45.0, 45.0}, {-15.0, 45.0}, {-15.0, 0.0}, {0.0, 0.0}})
+    {
+      laser_msgs::msg::PoseWithHeading goal;
+      goal.position.x = xy.first;
+      goal.position.y = xy.second;
+      goal.position.z = 3.0;
+      goals.push_back(goal);
+    }
+  }
+  return goals;
+}
+
+TEST_F(ReferenceHorizonsTest, MincoLongCircuitPreservesWaypointsContinuityAndLimits)
+{
+  auto start = window().reference_horizon.front();
+  start.pose.position.x = start.pose.position.y = 0.0;
+  start.pose.position.z = 1.5;
+  start.pose.orientation = geometry_msgs::msg::Quaternion();
+  start.pose.orientation.w = 1.0;
+  start.twist = geometry_msgs::msg::Twist();
+  const auto goals = long_circuit();
+  for (double acceleration : {2.0, 30.0}) {
+    const auto began = std::chrono::steady_clock::now();
+    const auto plan = Planning::polynomial(start, goals, acceleration);
+    RecordProperty(
+      acceleration == 2.0 ? "planning_ms_acc2" : "planning_ms_acc30",
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count());
+    EXPECT_TRUE(plan.states.empty());
+    EXPECT_LT(plan.times.back(), 900.0);
+    RecordProperty(acceleration == 2.0 ? "duration_acc2" : "duration_acc30", plan.times.back());
+    if (acceleration == 2.0) {
+      const auto dense = Planning::polynomial(start, goals, acceleration, 1e-6);
+      EXPECT_EQ(dense.times, plan.times);
+      EXPECT_TRUE(dense.states.empty());
+    }
+    for (int i = 0; i < plan.position.getPieceNum(); ++i) {
+      const auto & piece = plan.position[i];
+      for (int j = 0; j <= 100; ++j) {
+        const double t = piece.getDuration() * j / 100;
+        EXPECT_LE(piece.getVel(t).norm(), 2.0 + 1e-5);
+        EXPECT_LE(piece.getAcc(t).norm(), acceleration + 1e-5);
+        const auto p = piece.getPos(t);
+        EXPECT_GE(p.x(), -16.0);
+        EXPECT_LE(p.x(), 46.0);
+        EXPECT_GE(p.y(), -1.0);
+        EXPECT_LE(p.y(), 46.0);
+        EXPECT_GE(p.z(), 1.4);
+        EXPECT_LE(p.z(), 3.2);
+      }
+      if (i > 0) {
+        const auto & previous = plan.position[i - 1];
+        const double end = previous.getDuration();
+        EXPECT_LT((previous.getPos(end) - piece.getPos(0)).norm(), 1e-6);
+        EXPECT_LT((previous.getVel(end) - piece.getVel(0)).norm(), 1e-6);
+        EXPECT_LT((previous.getAcc(end) - piece.getAcc(0)).norm(), 1e-6);
+        EXPECT_LT((previous.getJer(end) - piece.getJer(0)).norm(), 1e-6);
+      }
+    }
+    int next_piece = 0;
+    for (std::size_t i = 0; i < goals.size(); ++i) {
+      const auto & p = goals[i].position;
+      double closest = std::numeric_limits<double>::infinity();
+      double velocity = 0.0;
+      int matched_piece = next_piece;
+      for (int k = next_piece; k < plan.position.getPieceNum(); ++k) {
+        const auto & piece = plan.position[k];
+        const double t = piece.getDuration();
+        const double error = (piece.getPos(t) - Eigen::Vector3d(p.x, p.y, p.z)).norm();
+        if (error < closest) {
+          closest = error;
+          velocity = piece.getVel(t).norm();
+          matched_piece = k;
+        }
+        if (closest < 1e-6) {
+          break;
+        }
+      }
+      EXPECT_LT(closest, 1e-6);
+      next_piece = matched_piece + 1;
+      if (i + 1 < goals.size()) {
+        EXPECT_GT(velocity, 0.01);
+      }
+    }
+    EXPECT_LT(plan.position.getVel(plan.times.back()).norm(), 1e-6);
+  }
+}
+
+TEST_F(ReferenceHorizonsTest, MincoLongCircuitPublishesOnlyTheCurrentPredictionWindow)
+{
+  hover();
+  planner("minco");
+  Planning::ready(*planning, Access::flight(*node), 0.0, 0.0, 0.0, 1.5);
+  ASSERT_TRUE(Planning::path(*planning, long_circuit()));
+  Planning::wait(*planning);
+  ASSERT_EQ(Planning::state(*planning), Status::TRACKING);
+  const auto & plan = Planning::plan(*planning);
+  const double end = Planning::end_time(*planning);
+  const double start_time = end - plan.times.back();
+  for (double elapsed : {0.0, 100.0, plan.times.back() - 0.1, plan.times.back() + 1.0}) {
+    set_time(*planning, start_time + elapsed);
+    Planning::ready(*planning, Access::flight(*node), 0.0, 0.0, 0.0, 1.5);
+    const auto msg = planning_tick();
+    ASSERT_GT(msg.reference_horizon.size(), 2U);
+    EXPECT_LT(msg.reference_horizon.size(), 200U);
+    EXPECT_LE(msg.time_from_start.front(), elapsed);
+    EXPECT_GE(msg.time_from_start.back(), elapsed + 1.0);
+    for (std::size_t i = 0; i < msg.reference_horizon.size(); ++i) {
+      if (i > 0) {
+        EXPECT_GT(msg.time_from_start[i], msg.time_from_start[i - 1]);
+      }
+      const auto expected = Planning::sample(plan, msg.time_from_start[i]);
+      const auto & actual = msg.reference_horizon[i];
+      EXPECT_NEAR(actual.pose.position.x, expected.pose.position.x, 1e-9);
+      EXPECT_NEAR(actual.pose.position.z, expected.pose.position.z, 1e-9);
+    }
+    EXPECT_EQ(msg.terminal, elapsed >= plan.times.back());
+    EXPECT_TRUE(Access::validate(*node, msg));
+  }
 }
 
 TEST_F(ReferenceHorizonsTest, MincoYawOnlyUsesTheShortestRotationAcrossPi)
