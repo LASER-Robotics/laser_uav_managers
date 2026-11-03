@@ -100,7 +100,62 @@ std::pair<double, double> evaluate(
   }
   return {value, derivative};
 }
+// Bernstein control points bound the whole curve, including peaks between samples.
+double derivative_bound(
+  Eigen::Matrix<double, 3, Eigen::Dynamic> control, double & lower, int depth = 0)
+{
+  const int degree = static_cast<int>(control.cols()) - 1;
+  const double upper = control.colwise().norm().maxCoeff();
+  lower = std::max({lower, control.col(0).norm(), control.col(degree).norm()});
+  if (!std::isfinite(upper)) {
+    throw std::runtime_error("MINCO returned a non-finite derivative bound");
+  }
+  if (depth == 16 || upper - lower <= 1e-7 * std::max(1.0, upper)) {
+    return upper;
+  }
+  Eigen::Matrix<double, 3, Eigen::Dynamic> left(3, degree + 1), right(3, degree + 1);
+  left.col(0) = control.col(0);
+  right.col(degree) = control.col(degree);
+  for (int level = 1; level <= degree; ++level) {
+    for (int j = 0; j <= degree - level; ++j) {
+      control.col(j) = 0.5 * (control.col(j) + control.col(j + 1));
+    }
+    left.col(level) = control.col(0);
+    right.col(degree - level) = control.col(degree - level);
+  }
+  const double left_bound = derivative_bound(left, lower, depth + 1);
+  return std::max(left_bound, derivative_bound(right, lower, depth + 1));
+}
+
 }  // namespace
+
+double PlanningManagerNode::minco_derivative_bound(
+  const geometry_utils::Piece & piece, int derivative)
+{
+  const int degree = piece.getDegree() - derivative;
+  Eigen::Matrix<double, 3, Eigen::Dynamic> power(3, degree + 1);
+  const auto & coefficients = piece.getCoeffMat();
+  double time_power = 1.0;
+  for (int k = 0; k <= degree; ++k) {
+    double factor = time_power;
+    for (int d = 1; d <= derivative; ++d) {
+      factor *= k + d;
+    }
+    power.col(k) = coefficients.col(piece.getDegree() - k - derivative) * factor;
+    time_power *= piece.getDuration();
+  }
+  Eigen::Matrix<double, 3, Eigen::Dynamic> control = power;
+  for (int i = 0; i <= degree; ++i) {
+    control.col(i) = power.col(0);
+    double ratio = 1.0;
+    for (int k = 1; k <= i; ++k) {
+      ratio *= static_cast<double>(i - k + 1) / (degree - k + 1);
+      control.col(i) += ratio * power.col(k);
+    }
+  }
+  double lower = 0.0;
+  return derivative_bound(control, lower);
+}
 
 bool PlanningManagerNode::store_super_trajectory(const Polynomial & msg, std::string & reason)
 {
@@ -212,7 +267,37 @@ PlanningManagerNode::GeneratedPlan PlanningManagerNode::generate_minco(
   const laser_msgs::msg::ReferenceState & start, const std::vector<Goal> & goals,
   double speed, double acceleration, double sampling_step, double yaw_rate)
 {
-  const int pieces = static_cast<int>(goals.size());
+  // Collinear knots keep long legs from amplifying derivatives at short neighboring legs.
+  const double max_length = std::max(0.1 * speed, speed * speed / (2.0 * acceleration));
+  const Eigen::Vector3d initial_velocity = start.use_linear_velocity ?
+    Eigen::Vector3d(start.twist.linear.x, start.twist.linear.y, start.twist.linear.z) :
+    Eigen::Vector3d::Zero();
+  std::vector<Eigen::Vector3d> positions;
+  std::vector<double> headings;
+  Eigen::Vector3d previous(start.pose.position.x, start.pose.position.y, start.pose.position.z);
+  double previous_yaw = yaw_of(start.pose.orientation);
+  for (const auto & goal : goals) {
+    const Eigen::Vector3d position(goal.position.x, goal.position.y, goal.position.z);
+    const double yaw = previous_yaw + std::remainder(goal.heading - previous_yaw, 2.0 * M_PI);
+    // Leave room to brake when the initial reference is moving away from the first goal.
+    const bool braking_start = positions.empty() &&
+      (initial_velocity.dot(position - previous) < 0.0 ||
+      (start.use_angular_velocity && start.twist.angular.z * (yaw - previous_yaw) < 0.0));
+    const double subdivisions = braking_start ? 1.0 :
+      std::max(1.0, std::ceil((position - previous).norm() / max_length));
+    if (!std::isfinite(subdivisions) || subdivisions + positions.size() > 16384) {
+      throw std::runtime_error("MINCO trajectory exceeds the polynomial piece limit");
+    }
+    const int count = static_cast<int>(subdivisions);
+    for (int j = 1; j <= count; ++j) {
+      const double u = static_cast<double>(j) / count;
+      positions.push_back(previous + u * (position - previous));
+      headings.push_back(previous_yaw + u * (yaw - previous_yaw));
+    }
+    previous = position;
+    previous_yaw = yaw;
+  }
+  const int pieces = static_cast<int>(positions.size());
   // shortcut: ReferenceState has no acceleration/jerk; seed zero until the contract carries them.
   Eigen::Matrix<double, 3, 4> head = Eigen::Matrix<double, 3, 4>::Zero();
   Eigen::Matrix<double, 3, 4> tail = head;
@@ -227,20 +312,18 @@ PlanningManagerNode::GeneratedPlan PlanningManagerNode::generate_minco(
   Eigen::Matrix3Xd points(3, pieces - 1), yaw_points(3, pieces - 1);
   yaw_points.setZero();
   Eigen::VectorXd times(pieces);
-  Eigen::Vector3d previous = head.col(0);
-  double previous_yaw = yaw_head(0, 0);
+  previous = head.col(0);
+  previous_yaw = yaw_head(0, 0);
   for (int i = 0; i < pieces; ++i) {
-    const auto & goal = goals[static_cast<std::size_t>(i)];
-    const Eigen::Vector3d position(goal.position.x, goal.position.y, goal.position.z);
-    const double yaw = previous_yaw + std::remainder(goal.heading - previous_yaw, 2.0 * M_PI);
-    times[i] = std::max({0.1, 2.2 * (position - previous).norm() / speed,
-        2.2 * std::abs(yaw - previous_yaw) / yaw_rate});
+    times[i] = std::max(
+      {0.1, (positions[i] - previous).norm() / speed,
+        2.2 * std::abs(headings[i] - previous_yaw) / yaw_rate});
     if (i + 1 < pieces) {
-      points.col(i) = position;
-      yaw_points(0, i) = yaw;
+      points.col(i) = positions[i];
+      yaw_points(0, i) = headings[i];
     }
-    previous = position;
-    previous_yaw = yaw;
+    previous = positions[i];
+    previous_yaw = headings[i];
   }
   tail.col(0) = previous;
   yaw_tail(0, 0) = previous_yaw;
@@ -251,74 +334,96 @@ PlanningManagerNode::GeneratedPlan PlanningManagerNode::generate_minco(
   const double velocity_limit = std::max(speed, head.col(1).norm()) * (1.0 + 1e-6);
   const double yaw_limit = std::max(yaw_rate, std::abs(yaw_head(0, 1))) * (1.0 + 1e-6);
   bool feasible = false;
-  for (int attempt = 0; attempt < 20; ++attempt) {
-    const double samples = std::ceil(times.sum() / sampling_step) + pieces + 1;
-    if (!times.allFinite() || !std::isfinite(samples) || samples > 250000) {
-      throw std::runtime_error("MINCO trajectory exceeds the sample limit");
+  for (int attempt = 0; attempt < 40; ++attempt) {
+    if (!times.allFinite() || !std::isfinite(times.sum())) {
+      throw std::runtime_error("MINCO returned non-finite segment times");
     }
     position_solver.setParameters(points, times);
     yaw_solver.setParameters(yaw_points, times);
     if (!position_solver.getCoeffs().allFinite() || !yaw_solver.getCoeffs().allFinite()) {
-      throw std::runtime_error("MINCO returned non-finite polynomial coefficients");
+      throw std::runtime_error(
+              "MINCO returned non-finite polynomial coefficients at attempt " +
+              std::to_string(attempt) + " (duration=" + std::to_string(times.sum()) + ")");
     }
     position_solver.getTrajectory(trajectory);
     yaw_solver.getTrajectory(yaw_trajectory);
-    if (trajectory.checkMaxVelRate(velocity_limit) &&
-      trajectory.checkMaxAccRate(acceleration) && yaw_trajectory.checkMaxVelRate(yaw_limit))
-    {
-      feasible = true;
+    feasible = true;
+    Eigen::VectorXd scales = Eigen::VectorXd::Ones(pieces);
+    for (int i = 0; i < pieces; ++i) {
+      const double scale = std::max(
+        {minco_derivative_bound(trajectory[i], 1) / velocity_limit,
+          std::sqrt(minco_derivative_bound(trajectory[i], 2) / acceleration),
+          minco_derivative_bound(yaw_trajectory[i], 1) / yaw_limit});
+      if (scale > 1.0) {
+        scales[i] = std::min(1.25, 1.01 * scale);
+        feasible = false;
+      }
+    }
+    if (feasible) {
       break;
     }
-    times *= 1.25;
+    // Slow adjacent pieces together so local retiming does not create a new time imbalance.
+    for (int i = 0; i < pieces; ++i) {
+      times[i] *= std::max(
+        {scales[i], scales[std::max(0, i - 1)],
+          scales[std::min(pieces - 1, i + 1)]});
+    }
   }
   if (!feasible) {
     throw std::runtime_error("MINCO could not satisfy velocity, acceleration and yaw-rate limits");
   }
   GeneratedPlan result;
-  const auto sample = [&](double time) {
-      if (!result.times.empty() && time <= result.times.back() + 1e-9) {
-        return;
-      }
-      const Eigen::Vector3d position = trajectory.getPos(time);
-      const Eigen::Vector3d velocity = trajectory.getVel(time);
-      const double yaw = yaw_trajectory.getPos(time).x();
-      const Eigen::Vector3d thrust = trajectory.getAcc(time) + Eigen::Vector3d(0.0, 0.0, 9.81);
-      const Eigen::Vector3d z = thrust.norm() > 1e-9 ?
-        Eigen::Vector3d(thrust.normalized()) : Eigen::Vector3d::UnitZ();
-      Eigen::Vector3d x = Eigen::Vector3d(-std::sin(yaw), std::cos(yaw), 0.0).cross(z);
-      x = x.norm() > 1e-9 ? Eigen::Vector3d(x.normalized()) : z.unitOrthogonal();
-      Eigen::Matrix3d attitude;
-      attitude.col(0) = x;
-      attitude.col(1) = z.cross(x);
-      attitude.col(2) = z;
-      const Eigen::Quaterniond q(attitude);
-      laser_msgs::msg::ReferenceState ref;
-      ref.pose.position.x = position.x();
-      ref.pose.position.y = position.y();
-      ref.pose.position.z = position.z();
-      ref.pose.orientation.w = q.w();
-      ref.pose.orientation.x = q.x();
-      ref.pose.orientation.y = q.y();
-      ref.pose.orientation.z = q.z();
-      ref.twist.linear.x = velocity.x();
-      ref.twist.linear.y = velocity.y();
-      ref.twist.linear.z = velocity.z();
-      ref.twist.angular.z = yaw_trajectory.getVel(time).x();
-      ref.use_position = ref.use_orientation = true;
-      ref.use_linear_velocity = ref.use_angular_velocity = true;
-      result.times.push_back(time);
-      result.states.push_back(ref);
-    };
-  double offset = 0.0;
+  result.position = std::move(trajectory);
+  result.yaw = std::move(yaw_trajectory);
+  result.sampling_step = sampling_step;
+  result.times.push_back(0.0);
   for (int i = 0; i < pieces; ++i) {
-    const int count = static_cast<int>(std::ceil(times[i] / sampling_step));
-    for (int j = 0; j < count; ++j) {
-      sample(offset + j * sampling_step);
-    }
-    offset += times[i];
+    result.times.push_back(result.times.back() + times[i]);
   }
-  sample(offset);
   return result;
+}
+
+laser_msgs::msg::ReferenceState PlanningManagerNode::sample_minco(
+  const GeneratedPlan & plan, double time)
+{
+  time = std::clamp(time, 0.0, plan.times.back());
+  const auto upper = std::upper_bound(plan.times.begin(), plan.times.end(), time);
+  const auto index = std::min<std::size_t>(upper - plan.times.begin() - 1, plan.times.size() - 2);
+  const auto & position_piece = plan.position[static_cast<int>(index)];
+  const auto & yaw_piece = plan.yaw[static_cast<int>(index)];
+  const double local_time = std::clamp(time - plan.times[index], 0.0, position_piece.getDuration());
+  const Eigen::Vector3d position = position_piece.getPos(local_time);
+  const Eigen::Vector3d velocity = position_piece.getVel(local_time);
+  const double yaw = yaw_piece.getPos(local_time).x();
+  const Eigen::Vector3d thrust = position_piece.getAcc(local_time) +
+    Eigen::Vector3d(0.0, 0.0, 9.81);
+  const Eigen::Vector3d z = thrust.norm() > 1e-9 ?
+    Eigen::Vector3d(thrust.normalized()) : Eigen::Vector3d::UnitZ();
+  Eigen::Vector3d x = Eigen::Vector3d(-std::sin(yaw), std::cos(yaw), 0.0).cross(z);
+  x = x.norm() > 1e-9 ? Eigen::Vector3d(x.normalized()) : z.unitOrthogonal();
+  Eigen::Matrix3d attitude;
+  attitude.col(0) = x;
+  attitude.col(1) = z.cross(x);
+  attitude.col(2) = z;
+  const Eigen::Quaterniond q(attitude);
+  laser_msgs::msg::ReferenceState ref;
+  ref.pose.position.x = position.x();
+  ref.pose.position.y = position.y();
+  ref.pose.position.z = position.z();
+  ref.pose.orientation.w = q.w();
+  ref.pose.orientation.x = q.x();
+  ref.pose.orientation.y = q.y();
+  ref.pose.orientation.z = q.z();
+  ref.twist.linear.x = velocity.x();
+  ref.twist.linear.y = velocity.y();
+  ref.twist.linear.z = velocity.z();
+  ref.twist.angular.z = yaw_piece.getVel(local_time).x();
+  ref.use_position = ref.use_orientation = true;
+  ref.use_linear_velocity = ref.use_angular_velocity = true;
+  if (time >= plan.times.back()) {
+    ref.twist = geometry_msgs::msg::Twist();
+  }
+  return ref;
 }
 
 PlanningManagerNode::PlanningManagerNode(const rclcpp::NodeOptions & options)
@@ -702,8 +807,7 @@ bool PlanningManagerNode::start_mission(const std::vector<Goal> & goals, double 
     return false;
   }
   const auto & velocity = odometry_->twist.twist.linear;
-  if (!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z))
-  {
+  if (!std::isfinite(velocity.x) || !std::isfinite(velocity.y) || !std::isfinite(velocity.z)) {
     reject("odometry velocity must be finite");
     return false;
   }
@@ -772,7 +876,7 @@ void PlanningManagerNode::start_segment()
     generation_ = std::async(
       std::launch::async,
       [physical, parameters, start, start_time, goals, index, stop, speed, yaw_limit,
-        backend, minco_speed, minco_acceleration, minco_step]() {
+      backend, minco_speed, minco_acceleration, minco_step]() {
         const auto began = SteadyClock::now();
         GeneratedPlan result;
         result.start = start_time;
@@ -782,9 +886,11 @@ void PlanningManagerNode::start_segment()
             start, stop ? std::vector<Goal>{goals[index]} : goals,
             minco_speed, minco_acceleration, minco_step, yaw_limit);
           result.start = start_time;
-        } else if ((stop || goals.size() == 1) && distance(start.pose.position, goal.position) < 1e-8 &&
-          (!start.use_linear_velocity ||
-          std::hypot(std::hypot(start.twist.linear.x, start.twist.linear.y),
+        } else if ((stop || goals.size() == 1) &&
+        distance(start.pose.position, goal.position) < 1e-8 &&
+        (!start.use_linear_velocity ||
+        std::hypot(
+          std::hypot(start.twist.linear.x, start.twist.linear.y),
           start.twist.linear.z) < 1e-8))
         {
           const double yaw = yaw_of(start.pose.orientation);
@@ -835,7 +941,9 @@ void PlanningManagerNode::start_segment()
         if (!std::all_of(result.states.begin(), result.states.end(), finite_state)) {
           throw std::runtime_error("planner returned a non-finite reference");
         }
-        result.states.back().twist = geometry_msgs::msg::Twist();
+        if (!result.states.empty()) {
+          result.states.back().twist = geometry_msgs::msg::Twist();
+        }
         result.elapsed_ms = std::chrono::duration<double, std::milli>(
           SteadyClock::now() - began).count();
         return result;
@@ -868,10 +976,11 @@ void PlanningManagerNode::poll_generation()
     mission_state_ = Status::TRACKING;
     RCLCPP_INFO(
       get_logger(),
-      "Mission %lu | %s segment %zu/%zu ready | duration=%.3f s | samples=%zu | planning=%.2f ms",
-      static_cast<unsigned long>(mission_.id), planner_.c_str(), mission_.stop ? mission_.index + 1 : 1,
+      "Mission %lu | %s segment %zu/%zu ready | duration=%.3f s | stored_points=%zu | planning=%.2f ms",
+      static_cast<unsigned long>(mission_.id),
+      planner_.c_str(), mission_.stop ? mission_.index + 1 : 1,
       mission_.stop ? mission_.goals.size() : 1,
-      plan_->times.back() - plan_->times.front(), plan_->states.size(), planning_duration_ms_);
+      plan_->times.back() - plan_->times.front(), plan_->times.size(), planning_duration_ms_);
     publish_status();
   } catch (const std::exception & e) {
     if (active_ && mission_.active && mission_.id == generation_mission_id_) {
@@ -973,27 +1082,49 @@ void PlanningManagerNode::timer_callback()
       return;
     }
     output.start_time = plan_start_;
-    auto first = std::upper_bound(times.begin(), times.end(), elapsed - control_->horizon_dt);
-    if (first != times.begin()) {
-      --first;
-    }
-    segment_terminal = elapsed >= times.back();
-    if (segment_terminal) {
-      first = times.end() - 1;
-    }
-    auto last = std::lower_bound(first, times.end(), elapsed + coverage);
-    if (last != times.end()) {
-      ++last;
-    }
-    for (auto it = first; it != last; ++it) {
-      output.time_from_start.push_back(*it);
-      output.reference_horizon.push_back(states[static_cast<std::size_t>(it - times.begin())]);
-    }
-    if (output.time_from_start.back() < elapsed + coverage) {
-      output.time_from_start.push_back(elapsed + coverage);
-      auto terminal = states.back();
-      terminal.twist = geometry_msgs::msg::Twist();
-      output.reference_horizon.push_back(terminal);
+    if (!plan_->position.empty()) {
+      const double step = plan_->sampling_step;
+      const double origin = elapsed >= times.back() ? elapsed :
+        std::floor(std::max(0.0, elapsed - control_->horizon_dt) / step) * step;
+      const double sample_count = std::ceil((elapsed + coverage - origin) / step) + 1;
+      if (!std::isfinite(sample_count) || sample_count > 65536) {
+        abort_mission("MINCO sample window exceeds the message limit", Status::FAILED);
+        return;
+      }
+      segment_terminal = elapsed >= times.back();
+      for (int i = 0; i < static_cast<int>(sample_count); ++i) {
+        const double t = origin + i * step;
+        auto ref = sample_minco(*plan_, t);
+        if (!finite_state(ref)) {
+          abort_mission("MINCO returned a non-finite reference", Status::FAILED);
+          return;
+        }
+        output.time_from_start.push_back(t);
+        output.reference_horizon.push_back(ref);
+      }
+    } else {
+      auto first = std::upper_bound(times.begin(), times.end(), elapsed - control_->horizon_dt);
+      if (first != times.begin()) {
+        --first;
+      }
+      segment_terminal = elapsed >= times.back();
+      if (segment_terminal) {
+        first = times.end() - 1;
+      }
+      auto last = std::lower_bound(first, times.end(), elapsed + coverage);
+      if (last != times.end()) {
+        ++last;
+      }
+      for (auto it = first; it != last; ++it) {
+        output.time_from_start.push_back(*it);
+        output.reference_horizon.push_back(states[static_cast<std::size_t>(it - times.begin())]);
+      }
+      if (output.time_from_start.back() < elapsed + coverage) {
+        output.time_from_start.push_back(elapsed + coverage);
+        auto terminal = states.back();
+        terminal.twist = geometry_msgs::msg::Twist();
+        output.reference_horizon.push_back(terminal);
+      }
     }
     output.terminal = segment_terminal && plan_final_;
   } else if (planner_ == "super" && plan_mission_id_ != 0) {

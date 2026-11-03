@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include <data_structure/base/trajectory.h>
+
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
@@ -84,14 +86,18 @@ private:
   } mission_;
   struct GeneratedPlan
   {
+    geometry_utils::Trajectory position, yaw;
+    double sampling_step{0.01};
     std::vector<double> times;
     std::vector<laser_msgs::msg::ReferenceState> states;
     rclcpp::Time start{0, 0, RCL_ROS_TIME};
     double elapsed_ms{0.0};
   };
+  static double minco_derivative_bound(const geometry_utils::Piece & piece, int derivative);
   static GeneratedPlan generate_minco(
     const laser_msgs::msg::ReferenceState & start, const std::vector<Goal> & goals,
     double speed, double acceleration, double sampling_step, double yaw_rate);
+  static laser_msgs::msg::ReferenceState sample_minco(const GeneratedPlan & plan, double time);
   std::future<GeneratedPlan> generation_;
   uint64_t generation_mission_id_{0};
   uint64_t plan_mission_id_{0};
