@@ -10,6 +10,9 @@
 #include <vector>
 
 #include <Eigen/Dense>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/message_filter.h>
+#include <tf2_ros/transform_listener.h>
 
 #include <std_srvs/srv/trigger.hpp>
 
@@ -102,6 +105,8 @@ private:
   rclcpp::Subscription<ReferenceHorizonBuffer::Horizon>::ConstSharedPtr
       sub_reference_horizon_;
   void reference_horizon_callback(const ReferenceHorizonBuffer::Horizon &msg);
+  void transformed_reference_horizon_callback(
+      const message_filters::MessageEvent<const ReferenceHorizonBuffer::Horizon> &event);
   ReferenceHorizonBuffer::Horizon::ConstSharedPtr get_valid_reference_horizon(
       std::string &reason) const;
 
@@ -185,6 +190,9 @@ private:
 
   // Validated external references and selection of the NMPC input.
   std::unique_ptr<ReferenceHorizonBuffer> reference_horizon_buffer_;
+  std::unique_ptr<tf2_ros::Buffer> reference_tf_buffer_;
+  std::unique_ptr<tf2_ros::TransformListener> reference_tf_listener_;
+  std::unique_ptr<tf2_ros::MessageFilter<ReferenceHorizonBuffer::Horizon>> reference_tf_filter_;
   std::unique_ptr<ReferenceHorizonSelector> reference_horizon_selector_;
   std::string reference_source_{"agile_planner"};
   ReferenceHorizonSelector::Source active_reference_source_{ReferenceHorizonSelector::Source::Planner};

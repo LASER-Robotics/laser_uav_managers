@@ -1089,13 +1089,10 @@ void EstimationManager::publish_odometry(
       state.pose.pose.position.x, state.pose.pose.position.y, state.pose.pose.position.z));
     tf_direct.setRotation(tf2::Quaternion(q_odom.x(), q_odom.y(), q_odom.z(), q_odom.w()));
 
-    tf2::Transform tf_inv = tf_direct.inverse();
-
     geometry_msgs::msg::TransformStamped dynamic_tf;
-    dynamic_tf.header.stamp = pub_time;
-    dynamic_tf.header.frame_id = uav_name_ + "/fcu";
-    dynamic_tf.child_frame_id = uav_name_ + "/odometry";
-    dynamic_tf.transform = tf2::toMsg(tf_inv);
+    dynamic_tf.header = odom_out_msg.header;
+    dynamic_tf.child_frame_id = odom_out_msg.child_frame_id;
+    dynamic_tf.transform = tf2::toMsg(tf_direct);
 
     tf_broadcaster_->sendTransform(dynamic_tf);
   } catch (const tf2::TransformException & ex) {

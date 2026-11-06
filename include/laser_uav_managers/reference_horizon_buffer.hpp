@@ -9,7 +9,10 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
+#include <Eigen/Geometry>
+#include <tf2_ros/buffer.h>
 #include <rclcpp/time.hpp>
 #include <laser_uav_multi_drones/msg/reference_horizon.hpp>
 
@@ -37,7 +40,8 @@ public:
   }
 
   bool store(const Horizon & message, const std::string & odometry_frame,
-    const rclcpp::Time & ros_now, Clock::time_point received, std::string & reason)
+    const rclcpp::Time & ros_now, Clock::time_point received, std::string & reason,
+    tf2_ros::Buffer * transforms = nullptr)
   {
     if (message.references.size() != steps_ + 1) {
       reason = "Reference horizon must contain exactly NMPC N + 1 states";
@@ -49,7 +53,7 @@ public:
       reason = "Reference horizon dt differs from NMPC dt";
       return false;
     }
-    if (!checkFrame(message, odometry_frame, reason) ||
+    if (!checkFrame(message, message.header.frame_id, reason) ||
       !checkStamp(message, ros_now, reason))
     {
       return false;
@@ -85,6 +89,53 @@ public:
         }
       }
     }
+    auto converted = message;
+    if (message.header.frame_id != odometry_frame) {
+      if (!transforms || odometry_frame.empty()) {
+        reason = "Reference horizon frame must match the nonempty odometry frame";
+        return false;
+      }
+      geometry_msgs::msg::TransformStamped transform;
+      try {
+        transform = transforms->lookupTransform(odometry_frame, message.header.frame_id,
+          tf2_ros::fromRclcpp(rclcpp::Time(message.header.stamp, ros_now.get_clock_type())));
+      } catch (const tf2::TransformException & error) {
+        reason = std::string("Reference horizon TF unavailable: ") + error.what();
+        return false;
+      }
+      const auto & q = transform.transform.rotation;
+      Eigen::Quaterniond rotation(q.w, q.x, q.y, q.z);
+      const auto & t = transform.transform.translation;
+      const Eigen::Vector3d translation(t.x, t.y, t.z);
+      if (!rotation.coeffs().allFinite() || std::abs(rotation.norm() - 1.) > 1.e-3 ||
+        !translation.allFinite())
+      {
+        reason = "Reference horizon TF must contain a finite translation and unit rotation";
+        return false;
+      }
+      rotation.normalize();
+      for (auto & reference : converted.references) {
+        auto & p = reference.pose.position;
+        auto & v = reference.twist.linear;
+        const Eigen::Vector3d position = rotation * Eigen::Vector3d(p.x, p.y, p.z) + translation;
+        const Eigen::Vector3d velocity = rotation * Eigen::Vector3d(v.x, v.y, v.z);
+        if (!position.allFinite() || !velocity.allFinite()) {
+          reason = "Reference horizon TF produced non-finite position or velocity";
+          return false;
+        }
+        p.x = position.x(); p.y = position.y(); p.z = position.z();
+        v.x = velocity.x(); v.y = velocity.y(); v.z = velocity.z();
+        if (reference.use_orientation) {
+          auto & orientation = reference.pose.orientation;
+          const Eigen::Quaterniond transformed = rotation * Eigen::Quaterniond(
+            orientation.w, orientation.x, orientation.y, orientation.z);
+          orientation.w = transformed.w(); orientation.x = transformed.x();
+          orientation.y = transformed.y(); orientation.z = transformed.z();
+        }
+        // NMPC angular rates use body axes and do not change with the world frame.
+      }
+      converted.header.frame_id = odometry_frame;
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     // Equal stamps are normal while /clock is paused. A ROS clock rewind or
     // an expired reception permits a producer to restart its timeline.
@@ -96,7 +147,7 @@ public:
       reason = "Reference horizon is older than the last accepted message";
       return false;
     }
-    horizon_ = std::make_shared<const Horizon>(message);
+    horizon_ = std::make_shared<const Horizon>(std::move(converted));
     received_time_ = received;
     received_ros_time_ = ros_now;
     reason = "External reference horizon accepted and stored";

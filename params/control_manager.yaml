@@ -6,7 +6,7 @@
       diagnostics: 100.0
 
     takeoff:
-      height: 5.0 # m
+      height: 3.0 # m
       speed: 0.8 # m/s
 
     reference:

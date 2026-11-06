@@ -1,5 +1,7 @@
 #include "laser_uav_managers/control_manager_node.hpp"
 
+#include <tf2_ros/create_timer_ros.h>
+
 namespace laser_uav_managers
 {
 /* ControlManagerNode() //{ */
@@ -199,6 +201,17 @@ ControlManagerNode::on_configure(const rclcpp_lifecycle::State &)
     RCLCPP_ERROR(get_logger(), "Invalid external reference configuration: %s", error.what());
     return CallbackReturn::FAILURE;
   }
+  reference_tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+  reference_tf_buffer_->setCreateTimerInterface(std::make_shared<tf2_ros::CreateTimerROS>(
+    get_node_base_interface(), get_node_timers_interface()));
+  reference_tf_listener_ = std::make_unique<tf2_ros::TransformListener>(
+    *reference_tf_buffer_, this, false);
+  reference_tf_filter_ = std::make_unique<tf2_ros::MessageFilter<ReferenceHorizonBuffer::Horizon>>(
+    *reference_tf_buffer_, "", 10, get_node_logging_interface(), get_node_clock_interface(),
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration<double>(reference_maximum_age_)));
+  reference_tf_filter_->registerCallback(
+    &ControlManagerNode::transformed_reference_horizon_callback, this);
   configure_pub_sub();
   configure_timers();
   configure_services();
@@ -249,6 +262,7 @@ CallbackReturn ControlManagerNode::on_deactivate(
   reference_horizon_buffer_->clear();
   reference_horizon_selector_->reset();
   active_reference_source_ = ReferenceHorizonSelector::Source::Planner;
+  reference_tf_filter_->clear();
   received_first_odometry_msg_ = false;
   return CallbackReturn::SUCCESS;
 }
@@ -278,6 +292,9 @@ CallbackReturn ControlManagerNode::on_cleanup(
   sub_trajectory_path_.reset();
   sub_reference_horizon_.reset();
   srv_get_reference_horizon_.reset();
+  reference_tf_filter_.reset();
+  reference_tf_listener_.reset();
+  reference_tf_buffer_.reset();
   reference_horizon_buffer_.reset();
   reference_horizon_selector_.reset();
   received_first_odometry_msg_ = false;
@@ -858,8 +875,38 @@ void ControlManagerNode::reference_horizon_callback(
   std::string reason;
   if (!received_first_odometry_msg_) {
     reason = "Waiting for odometry before accepting an external reference horizon";
-  } else if (reference_horizon_buffer_->store(msg, odometry_.header.frame_id,
-      now(), ReferenceHorizonBuffer::Clock::now(), reason))
+  } else if (msg.header.stamp.sec < 0 || msg.header.stamp.nanosec >= 1000000000U ||
+    msg.header.frame_id.empty() || odometry_.header.frame_id.empty())
+  {
+    reason = "Reference horizon requires valid timestamp and nonempty frames";
+  } else {
+    reference_tf_filter_->setTargetFrame(odometry_.header.frame_id);
+    // Preserve the wall reception time while TF catches up without blocking control.
+    const auto received = ReferenceHorizonBuffer::Clock::now().time_since_epoch();
+    reference_tf_filter_->add(message_filters::MessageEvent<const ReferenceHorizonBuffer::Horizon>(
+      std::make_shared<const ReferenceHorizonBuffer::Horizon>(msg),
+      rclcpp::Time(std::chrono::duration_cast<std::chrono::nanoseconds>(received).count(),
+      RCL_STEADY_TIME)));
+    return;
+  }
+  RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+    "Rejected external reference horizon: %s", reason.c_str());
+}
+
+void ControlManagerNode::transformed_reference_horizon_callback(
+  const message_filters::MessageEvent<const ReferenceHorizonBuffer::Horizon> & event)
+{
+  if (!is_active_ || !received_first_odometry_msg_) {return;}
+  const auto received = ReferenceHorizonBuffer::Clock::time_point(
+    std::chrono::duration_cast<ReferenceHorizonBuffer::Clock::duration>(
+    std::chrono::nanoseconds(event.getReceiptTime().nanoseconds())));
+  std::string reason;
+  if (std::chrono::duration<double>(ReferenceHorizonBuffer::Clock::now() - received).count() >
+    reference_maximum_age_)
+  {
+    reason = "Reference horizon reception expired while waiting for TF";
+  } else if (reference_horizon_buffer_->store(*event.getMessage(), odometry_.header.frame_id,
+      now(), received, reason, reference_tf_buffer_.get()))
   {
     return;
   }
