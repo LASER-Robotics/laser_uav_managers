@@ -407,7 +407,7 @@ void ControlManagerNode::configure_pub_sub()
       create_publisher<laser_msgs::msg::AttitudeRatesAndThrust>("attitude_rates_thrust_out", 10);
   } else {
     pub_motor_speed_reference_ =
-      create_publisher<laser_msgs::msg::MotorSpeed>("motor_speed_reference_out", 10);
+      create_publisher<laser_msgs::msg::MotorSpeedStamped>("motor_speed_reference_out", 10);
   }
 
   pub_diagnostics_ =
@@ -1175,10 +1175,10 @@ void ControlManagerNode::external_loop_timer_callback()
       msg.yaw_rate = 0.0;
       pub_attitude_rates_and_thrust_reference_->publish(msg);
     } else {
-      laser_msgs::msg::MotorSpeed msg;
-      for (int i = 0; i < controller_multirotor_params_.n_motors; ++i) {
-        msg.data.push_back(land_start_rampdown_);
-      }
+      laser_msgs::msg::MotorSpeedStamped msg;
+      msg.header.stamp = ros_now;
+      msg.data.data.assign(
+        static_cast<std::size_t>(controller_multirotor_params_.n_motors), land_start_rampdown_);
       pub_motor_speed_reference_->publish(msg);
     }
 
@@ -1308,9 +1308,10 @@ void ControlManagerNode::internal_loop_timer_callback()
   diagnostics_.last_control_input.data =
     std::vector<double>(indi_thrust.data(), indi_thrust.data() + indi_thrust.size());
 
-  laser_msgs::msg::MotorSpeed msg;
+  laser_msgs::msg::MotorSpeedStamped msg;
+  msg.header.stamp = get_clock()->now();
   for (Eigen::Index i = 0; i < indi_thrust.size(); ++i) {
-    msg.data.push_back(laser_uav_controllers::thrustToThrotle(
+    msg.data.data.push_back(laser_uav_controllers::thrustToThrotle(
       controller_multirotor_params_.motor_curve_a, controller_multirotor_params_.motor_curve_b,
       indi_thrust(i), controller_multirotor_params_.thrust_max,
       controller_multirotor_params_.thrust_min));
