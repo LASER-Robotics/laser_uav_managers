@@ -157,7 +157,7 @@ private:
   // Lifecycle publishers
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::AttitudeRatesAndThrust>::SharedPtr
     pub_attitude_rates_and_thrust_reference_;
-  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::MotorSpeed>::SharedPtr
+  rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::MotorSpeedStamped>::SharedPtr
     pub_motor_speed_reference_;
   rclcpp_lifecycle::LifecyclePublisher<laser_msgs::msg::UavControlDiagnostics>::SharedPtr
     pub_diagnostics_;
