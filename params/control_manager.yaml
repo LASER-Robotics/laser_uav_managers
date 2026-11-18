@@ -8,6 +8,7 @@
     takeoff:
       height: 1.5 # m
       speed: 1.0 # m/s
+      position_tolerance: 0.10 # m
 
     land:
       increment_rampdown: 0.15 # [0, 1]

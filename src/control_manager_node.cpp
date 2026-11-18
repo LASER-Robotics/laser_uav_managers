@@ -22,7 +22,6 @@ constexpr double kGravity = 9.81;
 constexpr double kTwoPi = 2.0 * M_PI;
 constexpr double kMassEstimateVzThreshold = 0.02;
 constexpr double kMassEstimateDurationSec = 3.0;
-constexpr double kTakeoffPositionTolerance = 0.10;
 
 }  // namespace
 
@@ -50,6 +49,7 @@ void ControlManagerNode::declare_parameters_once()
 
   declare_parameter("takeoff.height", rclcpp::ParameterValue(0.0));
   declare_parameter("takeoff.speed", rclcpp::ParameterValue(0.0));
+  declare_parameter("takeoff.position_tolerance", rclcpp::ParameterValue(0.10));
 
   declare_parameter("land.speed", rclcpp::ParameterValue(0.2));
   declare_parameter("land.threshold_detect", rclcpp::ParameterValue(0.8));
@@ -246,6 +246,7 @@ void ControlManagerNode::get_parameters()
 
   get_parameter("takeoff.height", takeoff_height_);
   get_parameter("takeoff.speed", takeoff_speed_);
+  get_parameter("takeoff.position_tolerance", takeoff_position_tolerance_);
 
   get_parameter("land.speed", land_speed_);
   get_parameter("land.threshold_detect", land_threshold_detect_);
@@ -354,6 +355,9 @@ void ControlManagerNode::validate_parameters() const
   }
   if (takeoff_speed_ <= 0.0) {
     throw std::runtime_error("takeoff.speed must be > 0");
+  }
+  if (!std::isfinite(takeoff_position_tolerance_) || takeoff_position_tolerance_ <= 0.0) {
+    throw std::runtime_error("takeoff.position_tolerance must be > 0");
   }
   if (land_speed_ <= 0.0) {
     throw std::runtime_error("land.speed must be > 0");
@@ -1249,7 +1253,7 @@ void ControlManagerNode::external_loop_timer_callback()
     const double z_error = std::abs(odometry_.pose.pose.position.z - takeoff_height_);
     if (
       (ros_now - vertical_start_time_).seconds() >= vertical_duration_ &&
-      z_error < kTakeoffPositionTolerance) {
+      z_error < takeoff_position_tolerance_) {
       if (estimate_mass()) {
         requested_takeoff_ = false;
         takeoff_done_ = true;

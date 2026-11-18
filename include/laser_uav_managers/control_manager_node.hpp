@@ -228,6 +228,7 @@ private:
   // Takeoff/landing
   double takeoff_height_{0.0};
   double takeoff_speed_{0.0};
+  double takeoff_position_tolerance_{0.10};
   double vertical_duration_{0.0};
   double vertical_target_z_{0.0};
   rclcpp::Time vertical_start_time_{0, 0, RCL_ROS_TIME};

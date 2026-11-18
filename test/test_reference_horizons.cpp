@@ -1718,4 +1718,22 @@ TEST_F(ReferenceHorizonsTest, SimulationSuperHeartbeatExpiresWhenSimulationTimeA
   Planning::tick(*planning);
   EXPECT_EQ(Planning::state(*planning), Status::ABORTED);
 }
+
+TEST_F(ReferenceHorizonsTest, ConfiguredTakeoffPositionToleranceGatesTakeoffCompletion)
+{
+  ASSERT_TRUE(node->set_parameter(rclcpp::Parameter("takeoff.position_tolerance", 0.0)).successful);
+  EXPECT_THROW(Access::initialize(*node), std::runtime_error);
+
+  ASSERT_TRUE(
+    node->set_parameter(rclcpp::Parameter("takeoff.position_tolerance", 0.35)).successful);
+  Access::initialize(*node);
+  Access::configure_control(*node);
+  ASSERT_TRUE(Access::request(*node));
+  Access::control_tick(*node, 100);
+  Access::odometry(*node, 1.0, 1.25, 0.7);
+  Access::control_tick(*node, 110);
+  EXPECT_FALSE(Access::takeoff_done(*node));
+  Access::control_tick(*node, 114);
+  EXPECT_TRUE(Access::takeoff_done(*node));
+}
 }  // namespace laser_uav_managers

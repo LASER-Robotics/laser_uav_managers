@@ -109,7 +109,7 @@ The range input still uses `/px4_api/garmin` in the supplied launch; the hardwar
 | `rate.external_loop_control` | `100.0` | Outer-loop target rate in Hz. |
 | `rate.internal_loop_control` | `250.0` | INDI inner-loop target rate in Hz. |
 | `rate.diagnostics` | `100.0` | Diagnostics rate in Hz. |
-| `takeoff.height`, `takeoff.speed` | `1.5`, `1.0` | Takeoff height in metres and speed in m/s. |
+| `takeoff.height`, `takeoff.speed`, `takeoff.position_tolerance` | `1.5`, `1.0`, `0.10` | Takeoff height (m), speed (m/s), and vertical completion tolerance (m). |
 | `land.speed` | `0.3` | Descent speed in m/s. |
 | `land.threshold_detect`, `land.increment_rampdown` | `0.70`, `0.15` | Landing detection and thrust ramp-down settings. |
 | `reference.timeout` | `0.50` | Maximum reference-publication age in seconds. |
