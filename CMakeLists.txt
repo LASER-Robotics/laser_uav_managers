@@ -52,9 +52,9 @@ set(dependencies
 
 find_library(laser_uav_lib laser_uav_lib)
 find_library(laser_uav_controllers laser_uav_controllers)
+find_library(acados_ocp_solver_multirotor_ode acados_ocp_solver_multirotor_ode
+  HINTS ${laser_uav_controllers_DIR}/../../../lib REQUIRED)
 find_library(laser_uav_estimators laser_uav_estimators)
-
-link_directories(${full_model_build})
 
 include_directories(
   include
@@ -86,7 +86,7 @@ target_link_libraries(
 target_link_libraries(
   ${library_name}
   ${laser_uav_controllers}
-  ${full_model_build}/libacados_ocp_solver_multirotor_ode.so
+  ${acados_ocp_solver_multirotor_ode}
   ${acados_lib}/libacados.so
 )
 
